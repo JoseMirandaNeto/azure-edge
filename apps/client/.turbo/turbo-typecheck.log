@@ -1,0 +1,4 @@
+
+> @azure-edge/client@0.1.0 typecheck /home/hatch/workspace/azure-edge/apps/client
+> tsc -p tsconfig.json --noEmit
+
