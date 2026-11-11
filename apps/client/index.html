@@ -13,13 +13,37 @@
       #debug { position: fixed; right: 12px; top: 12px; color: #d8ffe8; background: rgba(5, 25, 12, 0.75); padding: 10px 12px; border-radius: 8px; font: 12px/1.6 monospace; display: none; white-space: pre; }
       #debug.on { display: block; }
       #help { position: fixed; left: 12px; bottom: 12px; color: #cfe3f2; background: rgba(5, 20, 30, 0.6); padding: 8px 10px; border-radius: 8px; font-size: 12px; }
+      #bars { margin-top: 6px; width: 220px; }
+      .bar { height: 8px; border-radius: 4px; background: rgba(255,255,255,0.15); margin-top: 3px; overflow: hidden; }
+      .bar > div { height: 100%; border-radius: 4px; }
+      #hp-fill { background: #e5484d; width: 100%; }
+      #st-fill { background: #46c46a; width: 100%; }
+      #mp-fill { background: #4a90e2; width: 100%; }
+      #dmg-layer { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+      .dmg { position: absolute; left: 0; top: 0; font-weight: 800; font-size: 18px; color: #fff; text-shadow: 0 1px 2px #000, 0 0 6px rgba(0,0,0,0.6); display: none; white-space: nowrap; }
+      .dmg-crit { color: #ffb020; font-size: 24px; }
+      .dmg-finisher { color: #ff5a3c; font-size: 24px; }
+      .dmg-heal { color: #5aff8a; }
+      .dmg-parry { color: #4aa8ff; font-size: 22px; }
+      .dmg-perfect { color: #c9a0ff; font-size: 20px; }
+      .dmg-skill { color: #66aaff; font-size: 20px; }
+      .dmg-kill { color: #ffd700; font-size: 20px; }
+      .mob-bar { position: absolute; left: 0; top: 0; width: 64px; text-align: center; font-size: 10px; color: #fff; text-shadow: 0 1px 2px #000; }
+      .mob-bar-fill { height: 5px; border-radius: 3px; background: #e5484d; }
     </style>
   </head>
   <body>
     <div id="app"></div>
-    <div id="hud">Azure Edge — M0<br /><b id="status">Conectando…</b><br /><span id="player"></span></div>
+    <div id="dmg-layer"></div>
+    <div id="hud">Azure Edge — M1 · Dunas de Serket<br /><b id="status">Conectando…</b><br /><span id="player"></span>
+      <div id="bars">
+        <div class="bar"><div id="hp-fill"></div></div>
+        <div class="bar"><div id="st-fill"></div></div>
+        <div class="bar"><div id="mp-fill"></div></div>
+      </div>
+    </div>
     <div id="debug"></div>
-    <div id="help">WASD mover · arrastar o mouse gira a câmera · <b>F3</b> painel de debug · <b>?latency=100</b> simula 100 ms de ping</div>
+    <div id="help">WASD mover · arrastar o mouse gira a câmera · <b>LMB</b> ataque · <b>Espaço</b> esquiva · <b>RMB</b> guarda · <b>Q</b> Corte Crescente · <b>F3</b> painel de debug · <b>?latency=100</b> simula 100 ms de ping</div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

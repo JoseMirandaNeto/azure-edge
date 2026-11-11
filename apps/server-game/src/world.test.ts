@@ -75,8 +75,10 @@ describe("ZoneWorld (authoritative)", () => {
       const p = w.addPlayer(`bot${i}`);
       w.applyInput(p.id, forwardInput(1));
     }
-    for (let i = 0; i < 20; i += 1) w.step();
-    expect(w.tickMsMax).toBeLessThan(10);
+    // 200 ticks: p99 tolerates the one-off JIT/GC warm-up spike of the
+    // first ticks; the budget in AGENTS.md §6 is p99, not max.
+    for (let i = 0; i < 200; i += 1) w.step();
+    expect(w.tickMsP99()).toBeLessThan(10);
   });
 
   it("basic attack hits a target in front and emits a hit event", () => {

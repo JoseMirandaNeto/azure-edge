@@ -3,6 +3,7 @@ import {
   encodeMessage,
   MessageType,
   PROTOCOL_VERSION,
+  type EventPayload,
   type HelloPayload,
   type InputPayload,
   type PongPayload,
@@ -13,6 +14,7 @@ import {
 export interface NetCallbacks {
   onWelcome(w: WelcomePayload): void;
   onSnapshot(s: SnapshotPayload): void;
+  onEvent(e: EventPayload): void;
   onReject(seq: number, reason: string): void;
   onClose(): void;
 }
@@ -78,6 +80,8 @@ export class GameClient {
         }
         this.lastServerTick = snap.serverTick;
         this.cb.onSnapshot(snap);
+      } else if (type === MessageType.Event) {
+        this.cb.onEvent(payload as EventPayload);
       } else if (type === MessageType.Pong) {
         const pong = payload as PongPayload;
         this.rttMs = performance.now() - pong.clientTime;
