@@ -40,20 +40,43 @@ export interface InputPayload {
   moveY: number;
   /** Camera yaw in radians. */
   yaw: number;
-  /** Bitmask: 1=attack 2=dodge 4=guard 8=grab 16=jump 32=interact (M0: ignored except attack/dodge echo). */
+  /** Bitmask: 1=attack (edge) 2=dodge (edge) 4=guard (held) 8=grab 16=jump 32=interact.
+   *  skillId > 0 casts that skill (edge, M1: 1 = class skill). */
   buttons: number;
   skillId: number;
 }
 
 export interface EntityState {
   id: number;
+  /** "player" or "mob" (M1: wolves are entities too). */
+  kind: "player" | "mob";
+  /** Display name (mobs: "Lobo do Deserto"; players: chosen name). */
+  name?: string;
   x: number;
   y: number;
   /** Facing yaw, radians. */
   yaw: number;
-  /** Animation state: 0=idle 1=move 2=attack 3=dodge. */
+  /**
+   * Animation state: 0=idle 1=move 2=attack 3=dodge 4=guard 5=skill
+   * 6=stagger 7=knockdown 8=dead (see AnimState in combat.ts).
+   */
   animState: number;
   hpPct: number;
+  staminaPct?: number;
+  manaPct?: number;
+}
+
+/** Server → client combat event (type 13): syncs VFX/SFX/damage numbers. */
+export interface EventPayload {
+  eventId: number;
+  type: "hit" | "kill" | "parry" | "perfect" | "skill" | "heal";
+  sourceId: number;
+  targetId: number;
+  amount: number;
+  crit: boolean;
+  finisher?: boolean;
+  x: number;
+  y: number;
 }
 
 export interface WelcomePayload {
@@ -89,6 +112,7 @@ export type AnyPayload =
   | InputPayload
   | WelcomePayload
   | SnapshotPayload
+  | EventPayload
   | RejectPayload
   | PingPayload
   | PongPayload;
