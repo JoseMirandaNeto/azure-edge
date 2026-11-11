@@ -54,6 +54,14 @@ const dmgLayerEl = document.getElementById("dmg-layer") as HTMLElement;
 
 const view = new WorldView(appEl);
 
+/** Loading splash (arte da Serket): some com fade quando o jogo está pronto. */
+function hideLoading(): void {
+  const el = document.getElementById("loading");
+  if (!el || el.classList.contains("done")) return;
+  el.classList.add("done");
+  window.setTimeout(() => el.remove(), 700);
+}
+
 // --- Input state ---
 const keys = new Set<string>();
 let cameraYaw = 0;
@@ -315,6 +323,7 @@ const client = new GameClient(serverUrl, simulatedLatencyMs, {
     remoteHistory.clear();
     statusEl.textContent = `Conectado — zona ${w.zoneId} · tick ${w.tickRate} Hz`;
     playerEl.textContent = `Você é o jogador #${w.playerId} · backend: ${view.backend}`;
+    hideLoading();
     const me = w.entities.find((e) => e.id === w.playerId);
     if (me) {
       predicted = { x: me.x, y: me.y, yaw: me.yaw, moving: false };
@@ -396,6 +405,7 @@ const client = new GameClient(serverUrl, simulatedLatencyMs, {
     }
   },
   onClose() {
+    hideLoading();
     statusEl.textContent = "Desconectado do servidor — recarregue a página.";
   },
 });
@@ -634,6 +644,7 @@ async function boot(): Promise<void> {
   let genome = loadSavedGenome();
   let name = params.get("name") ?? "";
   if (!genome || params.has("creator")) {
+    hideLoading(); // O criador cobre a tela; o splash não pode ficar por cima.
     const result = await creator.show(genome, name);
     genome = result.genome;
     name = result.name;
@@ -643,6 +654,7 @@ async function boot(): Promise<void> {
 }
 
 boot().catch((err: unknown) => {
+  hideLoading();
   statusEl.textContent = `Falha ao iniciar: ${String(err)}`;
   console.error(err);
 });

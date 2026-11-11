@@ -27,6 +27,14 @@ import { buildCharacter, disposeCharacter, type CharacterBuild } from "@azure-ed
 
 export const GENOME_STORAGE_KEY = "azure-edge:genome:v1";
 
+/** Approved skill icon per skill id (mix final do Jose; runtime assets em public/assets). */
+const SKILL_ICONS: Record<string, string> = {
+  espadachim_corte_crescente: "/assets/icon_corte_crescente.png",
+  guardiao_provocacao: "/assets/icon_provocacao.png",
+  atirador_disparo_rapido: "/assets/icon_disparo_rapido.png",
+  clerigo_bencao_solar: "/assets/icon_bencao_solar.png",
+};
+
 export function loadSavedGenome(): CharacterGenome | null {
   try {
     const raw = localStorage.getItem(GENOME_STORAGE_KEY);
@@ -208,10 +216,12 @@ export class CharacterCreator {
     if (grid) {
       for (const cls of CLASSES) {
         const skill = skillById(cls.skillId)?.name ?? "";
+        const icon = SKILL_ICONS[cls.skillId];
         const card = document.createElement("button");
         card.className = "class-card";
         card.type = "button";
         card.innerHTML =
+          (icon ? `<img class="class-icon" src="${icon}" alt="Ícone de ${skill}" />` : "") +
           `<b>${cls.name}</b>${cls.id !== "espadachim" ? ' <span class="soon">M3 · em breve</span>' : ""}<br />` +
           `<span>${cls.role} · ${cls.weapon}</span><br /><span>Skill: ${skill}</span>`;
         card.addEventListener("click", () => {

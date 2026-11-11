@@ -61,9 +61,31 @@
       .dmg-kill { color: #ffd700; font-size: 20px; }
       .mob-bar { position: absolute; left: 0; top: 0; width: 64px; text-align: center; font-size: 10px; color: #fff; text-shadow: 0 1px 2px #000; }
       .mob-bar-fill { height: 5px; border-radius: 3px; background: #e5484d; }
+      /* Loading splash (Serket v1d, arte aprovada): tela cheia, fade-out ao conectar. */
+      #loading { position: fixed; inset: 0; z-index: 70; background: #0b1620; transition: opacity 0.6s ease; }
+      #loading.done { opacity: 0; pointer-events: none; }
+      #loading img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+      #loading .loading-overlay { position: absolute; left: 0; right: 0; bottom: 9%; display: flex; flex-direction: column; align-items: center; }
+      #loading .loading-text { color: #ffe9b8; font-size: 18px; font-weight: 700; text-shadow: 0 1px 4px #000; }
+      #loading .loading-bar { width: 280px; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.2); margin-top: 12px; overflow: hidden; }
+      #loading .loading-bar > div { height: 100%; width: 40%; border-radius: 3px; background: #ffb020; animation: loading-slide 1.2s ease-in-out infinite alternate; }
+      @keyframes loading-slide { from { margin-left: 0; } to { margin-left: 60%; } }
+      /* HUD: slot da skill (M2: só o Espadachim é jogável — Q = Corte Crescente). */
+      #skill-slot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+      #skill-slot img { width: 44px; height: 44px; border-radius: 8px; border: 1px solid #2a4a63; }
+      #skill-slot .key { color: #ffb020; font-weight: 700; font-size: 12px; }
+      #skill-slot .skill-name { font-size: 12px; color: #cfe3f2; }
+      .class-card img.class-icon { width: 48px; height: 48px; border-radius: 8px; float: left; margin: 0 8px 4px 0; border: 1px solid #2a4a63; }
     </style>
   </head>
   <body>
+    <div id="loading">
+      <img src="/assets/loading_serket.jpg" alt="Azure Edge — Serket" onerror="this.style.display='none'" />
+      <div class="loading-overlay">
+        <div class="loading-text">Carregando…</div>
+        <div class="loading-bar"><div></div></div>
+      </div>
+    </div>
     <div id="app"></div>
     <div id="dmg-layer"></div>
     <div id="hud">Azure Edge — M1 · Dunas de Serket<br /><b id="status">Conectando…</b><br /><span id="player"></span>
@@ -72,6 +94,7 @@
         <div class="bar"><div id="st-fill"></div></div>
         <div class="bar"><div id="mp-fill"></div></div>
       </div>
+      <div id="skill-slot"><img src="/assets/icon_corte_crescente.png" alt="Corte Crescente" /><span class="key">[Q]</span><span class="skill-name">Corte Crescente</span></div>
       <button id="btn-personagem" class="hud-btn" type="button">Personagem</button>
     </div>
     <div id="creator" class="hidden">

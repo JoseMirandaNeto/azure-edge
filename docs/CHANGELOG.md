@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.4.1] — 2026-11-11 — Integração da arte aprovada (ícones + tela de carregamento)
+
+- **Tela de carregamento** (`apps/client`): arte da Serket v1d
+  (`concept_loading_serket_f_v1d`, 1024x576, 63 KB) como splash em tela
+  cheia enquanto o client carrega/conecta, com "Carregando…" e barra
+  animada por cima; fade-out ao conectar (ou ao abrir o criador / ao
+  desconectar, para a mensagem de erro não ficar escondida). Se a imagem
+  falhar, o fundo escuro + texto continuam — o jogo nunca trava por isso.
+- **Ícones no HUD**: slot da skill no HUD com o ícone do Corte Crescente
+  v2 (`[Q]`, M2: só o Espadachim é jogável). Cards de classe do criador
+  passam a mostrar o ícone da skill de cada classe (mix final aprovado:
+  Corte Crescente v2, Provocação v1, Bênção Solar v3a, Disparo Rápido v3a).
+- **Atlas final** (`assets/generated/comfyui/icons/atlas_final.png`):
+  2x2 de 256 px na ordem Corte Crescente, Provocação, Disparo Rápido,
+  Bênção Solar.
+- **Assets de runtime** copiados para `apps/client/public/assets/` (ícones
+  256 px, atlas, `loading_serket.jpg`); originais gerados intactos em
+  `assets/generated/comfyui/`.
+- **Pendente — KTX2**: `basisu`/`toktx` não existem nesta VM, então os
+  assets vão em PNG/JPEG por enquanto (o HUD é `<img>` HTML, não precisa
+  de KTX2). Conversão para KTX2 fica para quando houver transcoder.
+
 ## [0.1.0] — 2026-11-11 — Milestone M0 Fundação
 
 - Monorepo pnpm workspaces + Turborepo, TypeScript estrito (`strict: true`).
