@@ -127,9 +127,9 @@ setInterval(() => {
       targetId: e.targetId,
       amount: e.amount,
       crit: e.crit,
-      finisher: e.finisher,
       x: e.x,
       y: e.y,
+      ...(e.finisher !== undefined ? { finisher: e.finisher } : {}),
     };
     const bytes = encodeMessage(MessageType.Event, payload);
     for (const [ws] of clients) {
