@@ -30,13 +30,18 @@ describe("gamedata", () => {
     expect(chain?.[0].cancelFrom).toBe(10);
   });
 
-  it("every class has exactly 1 skill, all provisional names flagged", () => {
+  it("every class has exactly 1 skill, with the final names from Jose", () => {
+    expect(SKILLS.map((s) => s.id)).toEqual([
+      "espadachim_corte_crescente",
+      "guardiao_provocacao",
+      "atirador_disparo_rapido",
+      "clerigo_bencao_solar",
+    ]);
     for (const c of CLASSES) {
       const skills = SKILLS.filter((s) => s.classId === c.id);
       expect(skills).toHaveLength(1);
       expect(skills[0].id).toBe(c.skillId);
       expect(skills[0].cooldownS).toBeGreaterThan(0);
-      expect(skills[0].nameProvisional).toBe(true);
       for (const w of skills[0].active) {
         expect(w.to).toBeGreaterThan(w.from);
         if (w.shape.type !== "self") {
@@ -45,18 +50,41 @@ describe("gamedata", () => {
         }
       }
     }
-    expect(skillById("espadachim_danca_laminas")?.kind).toBe("damage");
-    expect(skillById("clerigo_luz_restauradora")?.kind).toBe("heal");
-    expect(skillById("clerigo_luz_restauradora")?.active[0].hit.heal).toBe(40);
+    const corte = skillById("espadachim_corte_crescente");
+    expect(corte?.name).toBe("Corte Crescente");
+    expect(corte?.kind).toBe("damage");
+    expect(corte?.active[0].shape).toEqual({ angle: 140, radius: 3.2, type: "arc" });
+    expect(corte?.active[0].hit.mult).toBe(2.2);
+    expect(corte?.superArmor).toEqual({ from: 8, to: 18 });
+    expect(corte?.nameProvisional).toBeUndefined(); // final name
+    const provocacao = skillById("guardiao_provocacao");
+    expect(provocacao?.kind).toBe("taunt");
+    expect(provocacao?.taunt?.radiusM).toBe(10);
+    expect(provocacao?.taunt?.tempHp).toBe(30);
+    const disparo = skillById("atirador_disparo_rapido");
+    expect(disparo?.kind).toBe("damage");
+    expect(disparo?.active).toHaveLength(2); // two shots
+    const bencao = skillById("clerigo_bencao_solar");
+    expect(bencao?.kind).toBe("buff");
+    expect(bencao?.buff?.damageReduction).toBe(0.3);
+    expect(bencao?.buff?.radiusM).toBe(6);
   });
 
-  it("loads the lobo test mob with sane AI tuning", () => {
-    const lobo = mobById("lobo");
-    expect(lobo?.name).toBe("Lobo do Deserto");
-    expect(lobo?.maxHp).toBe(60);
-    expect(lobo?.aggroRadiusM).toBeGreaterThan(lobo?.attackRangeM ?? 0);
-    expect(lobo?.chaseSpeedMps).toBeGreaterThan(lobo?.walkSpeedMps ?? 0);
-    expect(lobo?.attack.windup).toBe(30);
-    expect(MOBS).toHaveLength(1);
+  it("loads the M1 mobs: escorpião is the main test mob, múmia the tough one", () => {
+    expect(MOBS.map((m) => m.id)).toEqual(["escorpiao", "formiga", "besouro", "mumia"]);
+    const esc = mobById("escorpiao");
+    expect(esc?.name).toBe("Escorpião do Deserto");
+    expect(esc?.maxHp).toBe(60);
+    expect(esc?.aggroRadiusM).toBeGreaterThan(esc?.attackRangeM ?? 0);
+    expect(esc?.chaseSpeedMps).toBeGreaterThan(esc?.walkSpeedMps ?? 0);
+    expect(esc?.attack.windup).toBe(30);
+    const mumia = mobById("mumia");
+    expect(mumia?.maxHp).toBe(120);
+    expect(mumia?.walkSpeedMps).toBeLessThan(esc?.walkSpeedMps ?? 0); // slower, tougher
+    expect(mobById("besouro")?.def).toBeGreaterThan(0); // armored
+    for (const m of MOBS) {
+      expect(m.color).toMatch(/^#[0-9a-f]{6}$/);
+      expect(m.scale).toBeGreaterThan(0);
+    }
   });
 });
