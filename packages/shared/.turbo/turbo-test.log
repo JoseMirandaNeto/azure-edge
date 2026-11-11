@@ -5,10 +5,12 @@
 
  RUN  v3.2.7 /home/hatch/workspace/azure-edge/packages/shared
 
- ✓ src/index.test.ts (9 tests) 115ms
+ ✓ src/combat.test.ts (10 tests) 77ms
+ ✓ src/reconcile.test.ts (9 tests) 80ms
+ ✓ src/index.test.ts (9 tests) 309ms
 
- Test Files  1 passed (1)
-      Tests  9 passed (9)
-   Start at  12:48:19
-   Duration  3.42s (transform 762ms, setup 0ms, collect 680ms, tests 115ms, environment 0ms, prepare 881ms)
+ Test Files  3 passed (3)
+      Tests  28 passed (28)
+   Start at  12:34:22
+   Duration  3.59s (transform 1.21s, setup 0ms, collect 1.49s, tests 466ms, environment 1ms, prepare 1.94s)
 

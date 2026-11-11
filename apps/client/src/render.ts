@@ -363,16 +363,38 @@ export class WorldView {
     };
   }
 
+  /** Pointer lock for mouse-look: click the canvas to capture the mouse. */
+  requestPointerLock(): void {
+    try {
+      const el = this.renderer.domElement as HTMLCanvasElement;
+      const r = el.requestPointerLock() as unknown;
+      if (r instanceof Promise) r.catch(() => {});
+    } catch {
+      // Pointer lock unavailable (iframe permissions, etc.) — drag still works.
+    }
+  }
+
+  isPointerLocked(): boolean {
+    return document.pointerLockElement === this.renderer.domElement;
+  }
+
   /**
    * Smoothed camera: the focus point and the camera position glide toward
    * their targets (~90 ms time constant) instead of snapping to the predicted
    * position every frame, so reconciliation corrections don't shake the screen.
+   * pitch = orbit elevation (0.05 near-horizontal … 1.25 high above).
    */
-  updateCamera(playerX: number, playerY: number, yaw: number, dt: number): void {
-    const { distanceM, heightM } = ZONE.camera;
+  updateCamera(playerX: number, playerY: number, yaw: number, pitch: number, dt: number): void {
+    const { distanceM } = ZONE.camera;
     const [px, , pz] = WORLD_TO_THREE(playerX, playerY);
     const py = terrainHeight(px, pz);
-    this.camPosTarget.set(px - Math.sin(yaw) * distanceM, py + heightM, pz + Math.cos(yaw) * distanceM);
+    const cp = Math.cos(pitch);
+    const sp = Math.sin(pitch);
+    this.camPosTarget.set(
+      px - Math.sin(yaw) * cp * distanceM,
+      py + 1.4 + sp * distanceM,
+      pz + Math.cos(yaw) * cp * distanceM,
+    );
     this.camFocusTarget.set(px, py + 1.4, pz);
     if (!this.camReady) {
       this.camPos.copy(this.camPosTarget);

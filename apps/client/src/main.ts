@@ -52,6 +52,12 @@ const view = new WorldView(appEl);
 // --- Input state ---
 const keys = new Set<string>();
 let cameraYaw = 0;
+/** Orbit elevation: default preserves the M0 framing (heightM above ground). */
+const PITCH_MIN = 0.05;
+const PITCH_MAX = 1.25;
+let cameraPitch = Math.asin(Math.min(0.9, (ZONE.camera.heightM - 1.4) / ZONE.camera.distanceM));
+/** The click that acquires pointer lock must not also fire an attack. */
+let suppressNextAttack = false;
 let dragging = false;
 let dragButton = -1;
 let lastPointerX = 0;
@@ -88,18 +94,32 @@ appEl.addEventListener("pointerdown", (e) => {
   lastPointerX = e.clientX;
   pointerDownX = e.clientX;
   pointerDownY = e.clientY;
+  // First click captures the mouse (pointer lock) for mouse-look; if the
+  // lock is refused/unavailable, dragging still rotates the camera.
+  if (!view.isPointerLocked()) {
+    view.requestPointerLock();
+    suppressNextAttack = true;
+  }
   if (e.button === 2) guardHeld = true;
 });
 window.addEventListener("pointermove", (e) => {
+  if (view.isPointerLocked()) {
+    // Mouse-look: horizontal orbits the camera, vertical raises/lowers it.
+    cameraYaw -= e.movementX * 0.005;
+    cameraPitch = Math.min(PITCH_MAX, Math.max(PITCH_MIN, cameraPitch - e.movementY * 0.005));
+    return;
+  }
   if (!dragging) return;
   cameraYaw -= (e.clientX - lastPointerX) * 0.005;
   lastPointerX = e.clientX;
 });
 window.addEventListener("pointerup", (e) => {
-  // LMB click (no drag) = attack; drag = camera.
-  if (e.button === 0 && Math.hypot(e.clientX - pointerDownX, e.clientY - pointerDownY) < 6) {
+  // LMB click (no drag) = attack; drag = camera. The click that locked the
+  // pointer does not attack.
+  if (e.button === 0 && !suppressNextAttack && Math.hypot(e.clientX - pointerDownX, e.clientY - pointerDownY) < 6) {
     pendingAttack = true;
   }
+  suppressNextAttack = false;
   if (e.button === 2) guardHeld = false;
   if (e.button === dragButton) dragging = false;
 });
@@ -546,7 +566,7 @@ function frame(now: number): void {
     }
   }
   updateFloats(now);
-  view.updateCamera(displayX, displayY, cameraYaw, effDt);
+  view.updateCamera(displayX, displayY, cameraYaw, cameraPitch, effDt);
   view.render();
 
   if (now - lastDebugUpdate > 250) {

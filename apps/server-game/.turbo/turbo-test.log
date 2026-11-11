@@ -5,10 +5,14 @@
 
  RUN  v3.2.7 /home/hatch/workspace/azure-edge/apps/server-game
 
- ✓ src/world.test.ts (6 tests) 12ms
+stdout | src/world.test.ts > ZoneWorld (authoritative) > tick com 30 mobs fica abaixo do orçamento de 10 ms p99
+tick 30 mobs: avg 0.131 ms, p99 0.721 ms, max 28.080 ms
+
+ ✓ src/world.test.ts (21 tests) 497ms
+   ✓ ZoneWorld (authoritative) > tick stays far under the 10 ms p99 budget for 200 entities  346ms
 
  Test Files  1 passed (1)
-      Tests  6 passed (6)
-   Start at  12:48:26
-   Duration  2.19s (transform 439ms, setup 0ms, collect 586ms, tests 12ms, environment 0ms, prepare 514ms)
+      Tests  21 passed (21)
+   Start at  12:34:22
+   Duration  4.84s (transform 1.46s, setup 0ms, collect 1.61s, tests 497ms, environment 1ms, prepare 694ms)
 

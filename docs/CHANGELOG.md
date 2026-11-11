@@ -20,6 +20,15 @@
 - Pendente de validação visual: FPS no navegador (sem browser headless utilizável
   neste ambiente; ver README.md).
 
+## [0.3.1] — 2026-11-11 — Iteração M1: captura do mouse + órbita da câmera
+
+- **Mouse-look (feedback do playtest do Jose)**: clicar no jogo captura o
+  mouse (pointer lock); mover o mouse orbita a câmera — horizontal gira o
+  yaw, vertical sobe/desce a câmera (pitch 0,05–1,25 rad, padrão preserva o
+  enquadramento do M0). ESC libera o mouse; clicar de novo recaptura. O
+  clique que captura não dispara ataque. Sem pointer lock (ou com ele
+  recusado), arrastar o mouse continua girando a câmera como antes.
+
 ## [0.3.0] — 2026-11-11 — Milestone M1 Combate Core
 
 - **Classes (decisão do Jose, substitui Lâmina/Arqueira/Mística)**: Guardião
