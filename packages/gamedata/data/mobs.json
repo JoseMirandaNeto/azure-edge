@@ -1,0 +1,1 @@
+[{"aggroRadiusM":12,"atk":8,"attack":{"active":6,"mult":1.0,"poise":10,"recovery":24,"shape":{"angle":90,"radius":2.0,"type":"arc"},"windup":30},"attackRangeM":1.8,"chaseSpeedMps":5.5,"def":0,"id":"lobo","leashRadiusM":18,"maxHp":60,"name":"Lobo do Deserto","nameProvisional":true,"poise":30,"poiseRegenPerS":5,"radiusM":0.5,"respawnS":8,"walkSpeedMps":2,"xp":10}]
