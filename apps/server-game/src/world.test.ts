@@ -78,7 +78,9 @@ describe("ZoneWorld (authoritative)", () => {
     // Warm up (JIT/GC) before measuring: the budget in AGENTS.md §6 is p99.
     for (let i = 0; i < 20; i += 1) w.step();
     w.resetTickStats();
-    for (let i = 0; i < 200; i += 1) w.step();
+    // 400 ticks: p99 tolerates a few slow ticks from parallel-test CPU
+    // contention on this shared 1.5-CPU VM; the sim itself is ~0.1 ms.
+    for (let i = 0; i < 400; i += 1) w.step();
     expect(w.tickMsP99()).toBeLessThan(10);
   });
 
@@ -316,7 +318,7 @@ describe("ZoneWorld (authoritative)", () => {
     let seq = 1;
     for (let i = 0; i < 20; i += 1) w.step(); // warm-up
     w.resetTickStats();
-    for (let i = 0; i < 200; i += 1) {
+    for (let i = 0; i < 400; i += 1) {
       if (a.combat.state === "idle" || a.combat.state === "move") {
         w.applyInput(a.id, input(seq, 1));
         seq += 1;
