@@ -20,6 +20,56 @@
 - Pendente de validação visual: FPS no navegador (sem browser headless utilizável
   neste ambiente; ver README.md).
 
+## [0.3.0] — 2026-11-11 — Milestone M1 Combate Core
+
+- **Classes (decisão do Jose, substitui Lâmina/Arqueira/Mística)**: Guardião
+  (escudo e arma), Atirador (espingarda), Clérigo (cura sagrada), Espadachim
+  (duas espadas). Classe jogável do M1: **Espadachim**.
+- **Skills finais, 1 por classe, pt-BR, data-driven** (`packages/gamedata`):
+  Espadachim — **Corte Crescente** (arco 140°, raio 3,2, mult 2,2, poise 20,
+  knockback, superArmor f8–f18, cd 6 s, mana 18; jogável no M1); Guardião —
+  **Provocação** (taunt em 10 m por 5 s + 30 HP temporário, cd 10 s, mana 20);
+  Atirador — **Disparo Rápido** (2 tiros em cone, cd 5 s, mana 15); Clérigo —
+  **Bênção Solar** (buff: −30% dano por 8 s, raio 6 m, cd 8 s, mana 25). As 3
+  últimas são dados validados (não jogáveis; Guardião/Atirador/Clérigo chegam
+  no M3). A mecânica de taunt existe no servidor (`tauntMobs` + IA reage).
+- **Mobs do M1 (decisão do Jose — o lobo SAI do M1 e fica para depois)**:
+  insetoides — **escorpião** (principal, HP 60), formiga gigante (rápida,
+  HP 40), besouro (blindado, DEF 6, HP 90) — e **múmia** (lenta e resistente,
+  HP 120, ATQ 12). Mesma IA simples por dados: patrulha, aggro por
+  proximidade, ataque telegrafado (windup + anel vermelho no chão), leash,
+  respawn. Arena: 3 escorpiões + 1 formiga + 1 besouro + 1 múmia.
+- **Combate autoritativo** (`apps/server-game`, frames lógicos 60 fps, 3
+  sub-steps por tick de 20 Hz): cadeia básica de 4 golpes do Espadachim
+  (tabela da COMBAT_SPEC: startup 7/6/9/14, mult 0,9/1,0/1,3/2,0, cancel,
+  finisher com knockdown), esquiva (i-frames f3–f14, perfeita f3–f8: +15 mana
+  e slow-mo local de 120 ms, custo 20 stamina, cancela recovery de ataque
+  por +5), guarda (70% dano frontal, parry nos primeiros 8 frames → stagger
+  no atacante), skill com cooldown/mana, hitboxes em arco no servidor,
+  poise/stagger (imunidade 4 s), números de dano, fórmula de dano da spec
+  (crit 5%, variância 0,95–1,05 via PRNG com seed, bônus de estado,
+  decaimento de combo após 5 acertos). Inputs inválidos viram Reject e o
+  client cancela o visual com blend de 80 ms.
+- **Client**: controles LMB ataque, Espaço esquiva, RMB guarda, Q skill;
+  prediction do combate (lunge, dash de esquiva, guarda parada), arco de
+  golpe translúcido, números de dano flutuantes (crítico/finisher/parry),
+  hit-stop (4 f normal / 7 f crítico-finisher), shake de câmera ≤ 0,15 e
+  pulso de FOV, barras de HP/stamina/mana, barras de HP dos mobs, painel F3
+  com estado de combate e alvo mais próximo.
+- **Arena**: Dunas de Serket / Oásis dos Nômades — terreno de dunas procedural,
+  paleta de areia (dados da zona), props de deserto (pedras, cactos, palmeiras
+  secas, ruínas). Vila Lótus continua nos dados como hub futuro.
+- **Protocolo (aditivo, sem bump de versão)**: `EntityState` ganha
+  `kind`/`name`/`mobId`/`staminaPct`/`manaPct` e `animState` 9 = windup
+  (telegraph); nova mensagem `Event` (13) para hit/kill/parry/perfect/skill/heal.
+- **Medido**: `pnpm test` 53/53 verde; `pnpm build` 8/8; `pnpm typecheck` 12/12;
+  tick com 30 mobs + combate: **avg 0,33 ms, p99 0,88 ms** (orçamento p99
+  ≤ 10 ms; max 52 ms é um spike isolado de warm-up); smoke 2 clients PASS
+  (2 jogadores + 6 mobs no snapshot).
+- **Pendente de validação visual (Jose)**: sensação do combate no Brave
+  (peso dos golpes, hit-stop, números de dano), FPS com 6 mobs em cena,
+  e o quicar com `?latency=100` após a correção do netcode (0.2.0).
+
 ## [0.2.0] — 2026-11-11 — M1 netcode/qualidade (parcial, sem combate)
 
 - `packages/shared`: novos helpers puros `reconcilePrediction` (rewind +

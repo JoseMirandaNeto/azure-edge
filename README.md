@@ -27,7 +27,7 @@ prompt mestre do agente em `00_AGENT_PROMPT.md`.
 ```bash
 pnpm install
 pnpm build        # compila todos os pacotes
-pnpm test         # 19 testes unitários (shared, gamedata, charforge, server-game)
+pnpm test         # 53 testes unitários (shared, gamedata, charforge, server-game)
 
 # Terminal 1 — servidor de jogo (porta 3001, tick 20 Hz)
 pnpm --filter @azure-edge/server-game start
@@ -42,6 +42,11 @@ pnpm --filter @azure-edge/client dev
 2. Em cada aba você é um jogador (cápsula azul = você, laranja = o outro).
 3. **WASD** move, **arrastar o mouse** gira a câmera, **F3** abre o painel de debug
    (FPS, ms de frame, draw calls, tris, ping, snapshots perdidos, posição).
+   **Combate (M1)**: **clique esquerdo** ataca (cadeia de 4 golpes), **Espaço**
+   esquiva (i-frames), **botão direito segurado** guarda (parry nos primeiros
+   8 frames), **Q** usa o **Corte Crescente** (skill do Espadachim). Os
+   escorpiões do Oásis patrulham, perseguem e telegrafam o ataque (anel
+   vermelho no chão) — mate um para ver números de dano e hit-stop.
 4. Para simular latência: `http://127.0.0.1:5173/?latency=100` (ping medido ≈ 100 ms).
 5. Smoke test automatizado (servidor real + 2 clients WS, sem navegador):
    `pnpm --filter @azure-edge/server-game smoke`
@@ -64,15 +69,18 @@ Browser (Vite + Three.js WebGPU/WebGL2)
 | Métrica | Valor medido | Orçamento |
 |---|---|---|
 | `pnpm build` | 8/8 pacotes, verde | — |
-| `pnpm test` | 19/19 testes, verde | verde |
-| Smoke 2 clients | PASS: 45 snapshots/cliente em ~2 s, ambos veem 2 entidades, A andou +8,7 m em 1,5 s (6 m/s), ackSeq avançou, Pong OK | 2+ clients se vendo |
-| Tick servidor, 200 entidades | max < 10 ms (teste unitário) | p99 ≤ 10 ms |
+| `pnpm test` | 53/53 testes, verde | verde |
+| Smoke 2 clients | PASS: 45 snapshots/cliente em ~2 s, ambos veem 2 jogadores + 6 mobs, A andou +8,7 m em 1,5 s (6 m/s), ackSeq avançou, Pong OK | 2+ clients se vendo |
+| Tick servidor, 200 entidades | p99 < 10 ms (teste unitário) | p99 ≤ 10 ms |
+| Tick servidor, 30 mobs + combate | avg 0,33 ms, **p99 0,88 ms**, max 52 ms (spike isolado de warm-up) | p99 ≤ 10 ms |
 | Download inicial (build) | ~1,35 MB JS total (726 KB app + 622 KB three.webgpu, gzip ~366 KB) | ≤ 25 MB |
 | FPS no navegador | **não medido aqui** — sem navegador headless utilizável neste ambiente (ver Riscos) | 60 fps |
 
-## Limitações conhecidas (M0)
+## Limitações conhecidas (M1)
 
-- Sem combate, mobs, skills ou persistência real — M1/M2/M4.
+- M1 implementado e testado no servidor (combate, mobs, skills em dados);
+  validação visual no navegador (sensação do combate, números de dano,
+  hit-stop, FPS com mobs) ainda depende do playtest do Jose.
 - Payload do protocolo é JSON dentro do framing binário (binário quantizado é M1+, ADR-003).
 - Sem ESLint configurado (typecheck estrito + testes cobrem M0; lint é dívida p/ M1).
 - O renderer WebGPU não foi exercitado em navegador headless aqui: o Chromium

@@ -75,3 +75,33 @@ Formato: `ADR-00N | data | contexto | decisão | alternativas | consequências`.
   headless em `/tmp/latency-harness.mjs` (não commitado, servidor real, 2
   clients): 100 ms → 0 saltos > 0,3 m (M0: 149); 500 ms → 0 (M0: 143).
   Confirmação visual no Brave com `?latency=100` ainda pendente.
+
+## ADR-006 | 2026-11-11 | Combate core do M1: classes, skills finais, mobs e protocolo aditivo
+
+- **Contexto**: M1 precisa de combate jogável com as decisões de design do Jose
+  (4 classes novas, 1 skill por classe, mobs do deserto) sem quebrar o M0.
+- **Decisão**: (1) Classes de lançamento: Guardião, Atirador, Clérigo,
+  Espadachim (substituem Lâmina/Arqueira/Mística); só o Espadachim é jogável
+  no M1. (2) Skills finais em pt-BR, data-driven: Corte Crescente (Espadachim,
+  jogável), Provocação (Guardião, taunt), Disparo Rápido (Atirador),
+  Bênção Solar (Clérigo, buff) — as 3 últimas são dados validados, e a
+  mecânica de taunt existe no servidor (`tauntMobs`: a IA do mob redireciona
+  o alvo para o provocador). (3) Mobs do M1: insetoides (escorpião principal,
+  formiga, besouro) + múmia; o **lobo sai do M1** e fica para depois — a troca
+  é só de dados (`mobs.json`), a IA é a mesma. (4) Combate em frames lógicos
+  60 fps com 3 sub-steps por tick de 20 Hz no servidor; hitboxes em arco
+  avaliadas por sub-step. (5) Protocolo **aditivo, sem bump de versão**:
+  `EntityState` ganha `kind`/`name`/`mobId`/`staminaPct`/`manaPct` e
+  `animState` 9 = windup (telegraph); mensagem `Event` (13) já prevista no
+  PROTOCOL.md para hit/kill/parry/perfect/skill/heal. (6) Arena de teste:
+  Oásis dos Nômades (Dunas de Serket), procedural; a zona completa com boss
+  Serket não é escopo do M1.
+- **Alternativas**: lobo como mob de teste (descartado por decisão do Jose);
+  bump de `PROTOCOL_VERSION` (desnecessário — campos novos são opcionais e
+  clients antigos os ignoram); hitboxes avaliadas só por tick (perderia
+  janelas ativas de 4 frames).
+- **Consequências / riscos**: tick com 30 mobs + combate medido em
+  avg 0,33 ms / p99 0,88 ms (orçamento p99 ≤ 10 ms); o cast de Provocação e
+  Bênção Solar só existe como dados + mecânica de mob até o Guardião/Clérigo
+  chegarem (M3); a sensação do combate (peso, hit-stop) ainda precisa do
+  playtest do Jose no Brave — sem browser headless utilizável aqui.

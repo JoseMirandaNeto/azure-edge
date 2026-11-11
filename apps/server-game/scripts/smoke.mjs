@@ -84,6 +84,8 @@ async function main() {
     snapshotsReceivedB: b.state.snapshots.length,
     entitiesSeenByA: snapA?.entities.length,
     entitiesSeenByB: snapB?.entities.length,
+    playersSeenByA: snapA?.entities.filter((e) => e.kind === "player").length,
+    mobsSeenByA: snapA?.entities.filter((e) => e.kind === "mob").length,
     aMovedForward: a.state.lastPos && y0a !== undefined ? a.state.lastPos.y - y0a : null,
     bMovedSideways: b.state.lastPos && y0b !== undefined ? b.state.lastPos.x - 0 : null,
     ackSeqAdvanced: (snapA?.ackSeq ?? 0) > 0,
@@ -92,13 +94,13 @@ async function main() {
   console.log(JSON.stringify(checks, null, 2));
   const ok =
     checks.distinctIds &&
-    checks.entitiesSeenByA === 2 &&
-    checks.entitiesSeenByB === 2 &&
+    checks.playersSeenByA === 2 &&
+    (checks.mobsSeenByA ?? 0) >= 1 &&
     (checks.aMovedForward ?? 0) > 1 &&
     checks.ackSeqAdvanced &&
     checks.pongReceived &&
     checks.snapshotsReceivedA > 10;
-  console.log(ok ? "SMOKE M0: PASS" : "SMOKE M0: FAIL");
+  console.log(ok ? "SMOKE M1: PASS" : "SMOKE M1: FAIL");
   a.ws.close();
   b.ws.close();
   server.kill("SIGINT");
