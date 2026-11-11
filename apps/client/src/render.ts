@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { ZONE } from "@azure-edge/gamedata";
+import { MOBS, ZONE } from "@azure-edge/gamedata";
 import { sfc32, type EntityState } from "@azure-edge/shared";
 
 export type Backend = "webgpu" | "webgl2";
@@ -16,13 +16,22 @@ export interface RendererLike {
 const WORLD_TO_THREE = (x: number, y: number): [number, number, number] => [x, 0, -y];
 
 function terrainHeight(x: number, z: number): number {
-  // Deterministic rolling hills, flattened near spawn. No Math.random.
+  // Deterministic terrain, flattened near spawn. No Math.random.
   const d = Math.hypot(x, z);
   const flat = Math.min(1, Math.max(0, (d - 6) / 14));
-  const h =
-    1.4 * Math.sin(x * 0.08) * Math.cos(z * 0.06) +
-    0.6 * Math.sin(x * 0.23 + z * 0.17) +
-    0.25 * Math.sin(x * 0.51 - z * 0.43);
+  let h: number;
+  if (ZONE.biome === "desert") {
+    // Smooth dunes: long low-frequency waves, no sharp rocks.
+    h =
+      1.8 * Math.sin(x * 0.05) * Math.cos(z * 0.04) +
+      0.5 * Math.sin(x * 0.13 + z * 0.09) +
+      0.2 * Math.sin(x * 0.31 - z * 0.27);
+  } else {
+    h =
+      1.4 * Math.sin(x * 0.08) * Math.cos(z * 0.06) +
+      0.6 * Math.sin(x * 0.23 + z * 0.17) +
+      0.25 * Math.sin(x * 0.51 - z * 0.43);
+  }
   return h * flat;
 }
 
@@ -53,22 +62,68 @@ function makePlaceholder(color: number): THREE.Group {
   return g;
 }
 
+/**
+ * Procedural mob placeholder (M1): color/scale come from gamedata.
+ * Insectoids (escorpião/formiga/besouro) are horizontal with a stinger/tail;
+ * the múmia stands upright like a player capsule. No external assets.
+ * Returns the group plus the telegraph ring (shown during windup, animState 9).
+ */
+function makeMob(color: number, scale: number, upright: boolean): { group: THREE.Group; ring: THREE.Mesh } {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.9, metalness: 0.05 });
+  if (upright) {
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.9, 4, 12), mat);
+    body.position.y = 0.95;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), mat);
+    head.position.y = 1.85;
+    g.add(body, head);
+  } else {
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.32, 0.7, 4, 10), mat);
+    body.rotation.x = Math.PI / 2;
+    body.position.y = 0.45;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 10), mat);
+    head.position.set(0, 0.5, -0.65);
+    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.7, 8), mat);
+    tail.rotation.x = Math.PI / 2 + 0.5;
+    tail.position.set(0, 0.75, 0.75);
+    g.add(body, head, tail);
+  }
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.9, 1.1, 32),
+    new THREE.MeshBasicMaterial({ color: 0xff2a1a, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }),
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.03;
+  ring.visible = false;
+  g.add(ring);
+  g.scale.setScalar(scale);
+  return { group: g, ring };
+}
+
 export class WorldView {
   backend: Backend = "webgl2";
   renderer!: RendererLike;
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
-  private readonly players = new Map<number, { group: THREE.Group }>();
+  private readonly players = new Map<number, { group: THREE.Group; guardDisc: THREE.Mesh }>();
+  private readonly mobs = new Map<number, { group: THREE.Group; ring: THREE.Mesh }>();
+  /** Swing arc effects: one translucent sector per attacker, fading out. */
+  private readonly swings = new Map<number, { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; until: number }>();
   private readonly camPos = new THREE.Vector3();
   private readonly camFocus = new THREE.Vector3();
   private readonly camPosTarget = new THREE.Vector3();
   private readonly camFocusTarget = new THREE.Vector3();
   private camReady = false;
+  /** Camera juice: shake amplitude (decays) and FOV pulse (decays). */
+  private shakeAmp = 0;
+  private fovPulse = 0;
+  private readonly baseFov = 60;
+  private readonly projV = new THREE.Vector3();
 
   constructor(private readonly container: HTMLElement) {
-    this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 500);
-    this.scene.background = new THREE.Color(0x87bfe8);
-    this.scene.fog = new THREE.Fog(0x87bfe8, 60, 160);
+    this.camera = new THREE.PerspectiveCamera(this.baseFov, 1, 0.1, 500);
+    this.scene.background = new THREE.Color(ZONE.palette.sky);
+    this.scene.fog = new THREE.Fog(ZONE.palette.fog, 60, 160);
   }
 
   /** Try WebGPU first, fall back to WebGL2 (AGENTS.md: WebGPU with fallback). */
@@ -104,8 +159,8 @@ export class WorldView {
   }
 
   private buildLights(): void {
-    const hemi = new THREE.HemisphereLight(0xbfe3ff, 0x3a5f3a, 0.9);
-    const sun = new THREE.DirectionalLight(0xfff2d9, 1.6);
+    const hemi = new THREE.HemisphereLight(0xffe9c4, new THREE.Color(ZONE.palette.ground).getHex(), 0.9);
+    const sun = new THREE.DirectionalLight(new THREE.Color(ZONE.palette.sun).getHex(), 1.8);
     sun.position.set(30, 50, -20);
     this.scene.add(hemi, sun);
   }
@@ -116,8 +171,8 @@ export class WorldView {
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position as THREE.BufferAttribute;
     const colors = new Float32Array(pos.count * 3);
-    const low = new THREE.Color(0x4f8f4a);
-    const high = new THREE.Color(0x8a7a5a);
+    const low = new THREE.Color(ZONE.palette.low);
+    const high = new THREE.Color(ZONE.palette.high);
     const c = new THREE.Color();
     for (let i = 0; i < pos.count; i += 1) {
       const x = pos.getX(i);
@@ -137,27 +192,44 @@ export class WorldView {
   }
 
   private buildProps(): void {
-    // Deterministic scatter: 24 rocks + 16 "trees" (cone + cylinder).
+    // Deterministic scatter from the zone data (desert: rocks, cacti, dry
+    // palms, broken pillars). No Math.random.
     const rng = sfc32(20261111);
-    const rockMat = new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 1 });
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 1 });
-    const leafMat = new THREE.MeshStandardMaterial({ color: 0x2f7a3d, roughness: 0.9 });
-    for (let i = 0; i < 40; i += 1) {
-      const x = (rng() * 2 - 1) * 55;
-      const z = (rng() * 2 - 1) * 55;
-      if (Math.hypot(x, z) < 8) continue;
-      const y = terrainHeight(x, z);
-      if (i < 24) {
-        const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.5 + rng() * 1.2, 0), rockMat);
-        rock.position.set(x, y + 0.4, z);
-        rock.rotation.y = rng() * Math.PI;
-        this.scene.add(rock);
-      } else {
-        const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.25, 1.6, 6), trunkMat);
-        trunk.position.set(x, y + 0.8, z);
-        const leaves = new THREE.Mesh(new THREE.ConeGeometry(1.1, 2.4, 8), leafMat);
-        leaves.position.set(x, y + 2.6, z);
-        this.scene.add(trunk, leaves);
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0x8a7a5f, roughness: 1 });
+    const cactusMat = new THREE.MeshStandardMaterial({ color: 0x4a7a3a, roughness: 0.9 });
+    const palmMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 1 });
+    const palmLeafMat = new THREE.MeshStandardMaterial({ color: 0x7a7a3a, roughness: 0.9 });
+    const ruinMat = new THREE.MeshStandardMaterial({ color: 0xb09a7a, roughness: 1 });
+    for (const spec of ZONE.props) {
+      for (let i = 0; i < spec.count; i += 1) {
+        const x = (rng() * 2 - 1) * 55;
+        const z = (rng() * 2 - 1) * 55;
+        if (Math.hypot(x, z) < 8) continue;
+        const y = terrainHeight(x, z);
+        if (spec.kind === "rock") {
+          const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.5 + rng() * 1.2, 0), rockMat);
+          rock.position.set(x, y + 0.4, z);
+          rock.rotation.y = rng() * Math.PI;
+          this.scene.add(rock);
+        } else if (spec.kind === "cactus") {
+          const cactus = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 1.6 + rng(), 8), cactusMat);
+          cactus.position.set(x, y + 0.9, z);
+          const top = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 6), cactusMat);
+          top.position.set(x, y + 1.8, z);
+          this.scene.add(cactus, top);
+        } else if (spec.kind === "palm") {
+          const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 2.6, 6), palmMat);
+          trunk.position.set(x, y + 1.3, z);
+          trunk.rotation.z = (rng() - 0.5) * 0.3;
+          const leaves = new THREE.Mesh(new THREE.ConeGeometry(1.4, 1.2, 8), palmLeafMat);
+          leaves.position.set(x, y + 2.9, z);
+          this.scene.add(trunk, leaves);
+        } else if (spec.kind === "ruin") {
+          const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.5 + rng() * 1.5, 0.8), ruinMat);
+          pillar.position.set(x, y + 0.9, z);
+          pillar.rotation.y = rng() * Math.PI;
+          this.scene.add(pillar);
+        }
       }
     }
   }
@@ -176,7 +248,13 @@ export class WorldView {
       this.scene.add(group);
       const [x, , z] = WORLD_TO_THREE(e.x, e.y);
       group.position.set(x, terrainHeight(x, z), z);
-      entry = { group };
+      const guardDisc = new THREE.Mesh(
+        new THREE.CircleGeometry(0.9, 24),
+        new THREE.MeshBasicMaterial({ color: 0x4aa8ff, side: THREE.DoubleSide, transparent: true, opacity: 0.35 }),
+      );
+      guardDisc.visible = false;
+      group.add(guardDisc);
+      entry = { group, guardDisc };
       this.players.set(e.id, entry);
     }
     const [tx, , tz] = WORLD_TO_THREE(e.x, e.y);
@@ -187,14 +265,102 @@ export class WorldView {
     // Simple walk bob so movement reads on screen.
     const bob = e.animState === 1 ? Math.sin(performance.now() / 90) * 0.05 : 0;
     entry.group.position.y = ty + bob;
+    // Guard disc: faces the attacker (in front of the player).
+    entry.guardDisc.visible = e.animState === 4;
+    if (entry.guardDisc.visible) {
+      entry.guardDisc.position.set(0, 1.1, -0.7);
+      entry.guardDisc.rotation.set(0, 0, 0);
+    }
   }
 
-  removePlayer(id: number): void {
-    const entry = this.players.get(id);
-    if (entry) {
-      this.scene.remove(entry.group);
+  /** Mob placeholder from gamedata (color/scale by mobId); ring = windup telegraph. */
+  updateMob(e: EntityState): void {
+    let entry = this.mobs.get(e.id);
+    if (!entry) {
+      const data = MOBS.find((m) => m.id === e.mobId) ?? MOBS[0];
+      const color = data ? Number.parseInt(data.color.slice(1), 16) : 0x888888;
+      const scale = data?.scale ?? 1;
+      const { group, ring } = makeMob(color, scale, e.mobId === "mumia");
+      this.scene.add(group);
+      entry = { group, ring };
+      this.mobs.set(e.id, entry);
+    }
+    const [tx, , tz] = WORLD_TO_THREE(e.x, e.y);
+    const ty = terrainHeight(tx, tz);
+    entry.group.position.set(tx, ty, tz);
+    entry.group.rotation.y = -e.yaw;
+    entry.ring.visible = e.animState === 9;
+    if (entry.ring.visible) {
+      const pulse = 0.85 + Math.sin(performance.now() / 90) * 0.15;
+      entry.ring.scale.setScalar(pulse);
+    }
+  }
+
+  removeEntity(id: number): void {
+    const p = this.players.get(id);
+    if (p) {
+      this.scene.remove(p.group);
       this.players.delete(id);
     }
+    const m = this.mobs.get(id);
+    if (m) {
+      this.scene.remove(m.group);
+      this.mobs.delete(id);
+    }
+    const s = this.swings.get(id);
+    if (s) {
+      this.scene.remove(s.mesh);
+      this.swings.delete(id);
+    }
+  }
+
+  /** Swing arc tied to an attacker id (replaces any previous arc of theirs). */
+  showSwingFor(id: number, x: number, y: number, yaw: number, radius: number, angleDeg: number, color = 0x9fd8ff): void {
+    const old = this.swings.get(id);
+    if (old) {
+      this.scene.remove(old.mesh);
+      old.mesh.geometry.dispose();
+      old.mat.dispose();
+    }
+    const [tx, , tz] = WORLD_TO_THREE(x, y);
+    const ty = terrainHeight(tx, tz);
+    const mat = new THREE.MeshBasicMaterial({
+      color, side: THREE.DoubleSide, transparent: true, opacity: 0.55, depthWrite: false,
+    });
+    const geo = new THREE.CircleGeometry(radius, 24, Math.PI / 2 - (angleDeg * Math.PI) / 360, (angleDeg * Math.PI) / 180);
+    const mesh = new THREE.Mesh(geo, mat);
+    // YXZ order: lay flat first (local +Y -> world -Z = forward), then yaw.
+    mesh.rotation.order = "YXZ";
+    mesh.rotation.set(-Math.PI / 2, -yaw, 0);
+    mesh.position.set(tx, ty + 0.4, tz);
+    this.scene.add(mesh);
+    this.swings.set(id, { mesh, mat, until: performance.now() + 180 });
+  }
+
+  /** Fade a swing arc out over 80 ms (visual rollback when the server rejects). */
+  cancelSwing(id: number): void {
+    const s = this.swings.get(id);
+    if (s) s.until = Math.min(s.until, performance.now() + 80);
+  }
+
+  /** Camera juice: small shake (≤ 0.15 per spec) and a light FOV pulse. */
+  addShake(amount: number): void {
+    this.shakeAmp = Math.min(0.15, this.shakeAmp + amount);
+  }
+
+  addFovPulse(amount: number): void {
+    this.fovPulse = Math.min(4, this.fovPulse + amount);
+  }
+
+  /** Project a world position to screen pixels (for damage numbers / HP bars). */
+  worldToScreen(x: number, y: number, heightM = 2): { sx: number; sy: number; behind: boolean } {
+    const [tx, , tz] = WORLD_TO_THREE(x, y);
+    this.projV.set(tx, terrainHeight(tx, tz) + heightM, tz).project(this.camera);
+    return {
+      sx: (this.projV.x * 0.5 + 0.5) * window.innerWidth,
+      sy: (-this.projV.y * 0.5 + 0.5) * window.innerHeight,
+      behind: this.projV.z > 1,
+    };
   }
 
   /**
@@ -217,11 +383,38 @@ export class WorldView {
       this.camPos.lerp(this.camPosTarget, k);
       this.camFocus.lerp(this.camFocusTarget, k);
     }
-    this.camera.position.copy(this.camPos);
+    // Camera shake: deterministic sine wobble (visual only), decaying.
+    const t = performance.now() / 1000;
+    this.shakeAmp *= Math.exp(-Math.max(0, dt) / 0.12);
+    if (this.shakeAmp < 0.001) this.shakeAmp = 0;
+    const shX = Math.sin(t * 97.3) * this.shakeAmp;
+    const shY = Math.sin(t * 113.7) * this.shakeAmp;
+    this.camera.position.set(this.camPos.x + shX, this.camPos.y + shY, this.camPos.z);
     this.camera.lookAt(this.camFocus);
+    // FOV pulse (light, decays back to base).
+    this.fovPulse *= Math.exp(-Math.max(0, dt) / 0.15);
+    if (this.fovPulse < 0.05) this.fovPulse = 0;
+    const fov = this.baseFov + this.fovPulse;
+    if (Math.abs(this.camera.fov - fov) > 0.01) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
   }
 
   render(): void {
+    // Fade out finished swing arcs.
+    const now = performance.now();
+    for (const [id, s] of [...this.swings.entries()]) {
+      const remain = s.until - now;
+      if (remain <= 0) {
+        this.scene.remove(s.mesh);
+        s.mesh.geometry.dispose();
+        s.mat.dispose();
+        this.swings.delete(id);
+      } else if (remain < 80) {
+        s.mat.opacity = 0.55 * (remain / 80);
+      }
+    }
     this.renderer.render(this.scene, this.camera);
   }
 

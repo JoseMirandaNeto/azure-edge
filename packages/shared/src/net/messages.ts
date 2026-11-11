@@ -48,17 +48,19 @@ export interface InputPayload {
 
 export interface EntityState {
   id: number;
-  /** "player" or "mob" (M1: wolves are entities too). */
+  /** "player" or "mob" (M1: escorpião, formiga, besouro, múmia). */
   kind: "player" | "mob";
-  /** Display name (mobs: "Lobo do Deserto"; players: chosen name). */
+  /** Display name (mobs: "Escorpião do Deserto"; players: chosen name). */
   name?: string;
+  /** Mob type id (mobs only) so the client can pick color/scale. */
+  mobId?: string;
   x: number;
   y: number;
   /** Facing yaw, radians. */
   yaw: number;
   /**
    * Animation state: 0=idle 1=move 2=attack 3=dodge 4=guard 5=skill
-   * 6=stagger 7=knockdown 8=dead (see AnimState in combat.ts).
+   * 6=stagger 7=knockdown 8=dead 9=windup (mob telegraph, see mobAnim in world.ts).
    */
   animState: number;
   hpPct: number;

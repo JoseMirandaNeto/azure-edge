@@ -983,6 +983,7 @@ export class ZoneWorld {
         id: m.id,
         kind: "mob" as const,
         name: m.name,
+        mobId: m.mobId,
         x: m.x,
         y: m.y,
         yaw: m.yaw,
