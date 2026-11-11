@@ -1,4 +1,4 @@
-import { CLASSES, ZONE, classById, skillById, type ClassData } from "@azure-edge/gamedata";
+import { CLASSES, ZONE, classById, mobById, skillById, type ClassData, type MobData } from "@azure-edge/gamedata";
 import {
   AnimState,
   BASE_CRIT_CHANCE,
@@ -53,6 +53,7 @@ import {
  */
 export interface PlayerEntity extends SimState {
   id: number;
+  kind: "player";
   name: string;
   classId: string;
   atk: number;
@@ -79,6 +80,34 @@ export interface PlayerEntity extends SimState {
   deadUntilFrame: number;
   /** Position before this tick (speed validation). */
   _before?: { x: number; y: number; yaw: number; moving: boolean };
+}
+
+/** Mob AI states (patrol → chase → windup → attack → recover). */
+export type MobAiState = "patrol" | "chase" | "windup" | "attack" | "recover" | "stagger" | "dead";
+
+export interface MobEntity {
+  id: number;
+  kind: "mob";
+  mobId: string;
+  name: string;
+  data: MobData;
+  x: number;
+  y: number;
+  yaw: number;
+  combat: Combatant;
+  def: number;
+  aiState: MobAiState;
+  anchorX: number;
+  anchorY: number;
+  patrolX: number;
+  patrolY: number;
+  targetId: number | null;
+  /** Provocação: { playerId, frame until which the mob must chase them }. */
+  taunt: { byPlayerId: number; untilFrame: number } | null;
+  respawnFrame: number;
+  /** "windowKey:targetId" pairs already hit by the current swing. */
+  hitDone: Set<string>;
+  extraM: number;
 }
 
 const SUB_STEPS_PER_TICK = 3;
@@ -113,7 +142,10 @@ export class ZoneWorld {
   /** Logical 60 fps frame counter (3 per tick). */
   frame = 0;
   readonly players = new Map<number, PlayerEntity>();
+  /** Mobs live in a separate id space (10000+). */
+  readonly mobs = new Map<number, MobEntity>();
   private nextId = 1;
+  private nextMobId = 10000;
   private nextEventId = 1;
   private events: Array<CombatEvent & { eventId: number }> = [];
   /** Seeded RNG for crit/variance — deterministic per world seed. */
@@ -134,6 +166,7 @@ export class ZoneWorld {
     const radius = 1.5 + (id - 1) * 0.5;
     const p: PlayerEntity = {
       id,
+      kind: "player",
       name: name || `Player${id}`,
       classId: cls.id,
       atk: cls.base.atk,
@@ -328,22 +361,6 @@ export class ZoneWorld {
     }
   }
 
-  private stagger(p: PlayerEntity): void {
-    const c = p.combat;
-    if (c.state === "dead") return;
-    c.state = "stagger";
-    c.stateFrame = 0;
-    c.guardSinceFrame = null;
-  }
-
-  private knockdown(p: PlayerEntity): void {
-    const c = p.combat;
-    if (c.state === "dead") return;
-    c.state = "knockdown";
-    c.stateFrame = 0;
-    c.guardSinceFrame = null;
-  }
-
   /** Is the target inside a skill's super-armor window right now? */
   private targetSuperArmor(t: PlayerEntity): boolean {
     const c = t.combat;
@@ -356,91 +373,134 @@ export class ZoneWorld {
   // --- Hit resolution ---
 
   /**
-   * Resolve one hit window against every other living player in the arc.
-   * Each target is hit at most once per window (windowKey). Mobs join the
-   * target list in the next step; PvP uses the same rules.
+   * Resolve one hit window against every other living entity in the arc.
+   * Each target is hit at most once per window (windowKey). `hitMobs` is
+   * false for mob attacks (mobs don't fight each other).
    */
   private resolveHit(
-    sourceId: number,
+    source: { id: number; x: number; y: number; yaw: number; atk: number; hitDone: Set<string> },
     windowKey: string,
-    sx: number,
-    sy: number,
-    syaw: number,
-    atk: number,
     radius: number,
     angleDeg: number,
     mult: number,
     poiseDmg: number,
     finisher: boolean,
     effect?: "knockback" | "knockdown",
+    hitMobs = true,
   ): void {
     for (const t of this.players.values()) {
-      if (t.id === sourceId || t.combat.state === "dead") continue;
+      if (t.id === source.id || t.combat.state === "dead") continue;
       const key = `${windowKey}:${t.id}`;
-      const attacker = this.players.get(sourceId);
-      if (!attacker || attacker.hitDone.has(key)) continue;
-      if (!arcContains(sx, sy, syaw, t.x, t.y, { type: "arc", radius, angle: angleDeg })) continue;
-      attacker.hitDone.add(key);
-      this.applyHitToPlayer(sourceId, sx, sy, syaw, atk, mult, poiseDmg, finisher, effect, t);
+      if (source.hitDone.has(key)) continue;
+      if (!arcContains(source.x, source.y, source.yaw, t.x, t.y, { type: "arc", radius, angle: angleDeg })) continue;
+      source.hitDone.add(key);
+      this.applyHit(source, mult, poiseDmg, finisher, effect, t);
+    }
+    if (!hitMobs) return;
+    for (const m of this.mobs.values()) {
+      if (m.combat.state === "dead") continue;
+      const key = `${windowKey}:m${m.id}`;
+      if (source.hitDone.has(key)) continue;
+      if (!arcContains(source.x, source.y, source.yaw, m.x, m.y, { type: "arc", radius, angle: angleDeg })) continue;
+      source.hitDone.add(key);
+      this.applyHit(source, mult, poiseDmg, finisher, effect, m);
     }
   }
 
-  private applyHitToPlayer(
-    sourceId: number,
-    sx: number,
-    sy: number,
-    syaw: number,
-    atk: number,
+  /** Shared damage path for players and mobs (dodge/guard only apply to players). */
+  private applyHit(
+    source: { id: number; x: number; y: number; yaw: number; atk: number },
     mult: number,
     poiseDmg: number,
     finisher: boolean,
     effect: "knockback" | "knockdown" | undefined,
-    t: PlayerEntity,
+    t: PlayerEntity | MobEntity,
   ): void {
     const c = t.combat;
-    // Dodge i-frames: a hit in the perfect window (f3–f8) is a perfect dodge.
-    if (c.state === "dodge" && dodgeIsIframes(c.stateFrame)) {
-      if (dodgeIsPerfectWindow(c.stateFrame)) {
-        c.mana = Math.min(c.maxMana, c.mana + PERFECT_DODGE_MANA);
-        this.emit({ kind: "perfect", sourceId, targetId: t.id, amount: 0, crit: false, x: t.x, y: t.y });
-      }
-      return;
-    }
-    // Guard: frontal only. First 8 frames of the guard = parry.
-    let dmgMult = 1;
-    let finalPoise = poiseDmg;
-    if (c.state === "guard" && isInFront(t.x, t.y, t.yaw, sx, sy)) {
-      const guardAge = this.frame - (c.guardSinceFrame ?? this.frame);
-      if (guardAge <= PARRY_WINDOW_FRAMES) {
-        this.emit({ kind: "parry", sourceId, targetId: t.id, amount: 0, crit: false, x: t.x, y: t.y });
-        const attacker = this.players.get(sourceId);
-        if (attacker) this.stagger(attacker);
+    if (t.kind === "player") {
+      // Dodge i-frames: a hit in the perfect window (f3–f8) is a perfect dodge.
+      if (c.state === "dodge" && dodgeIsIframes(c.stateFrame)) {
+        if (dodgeIsPerfectWindow(c.stateFrame)) {
+          c.mana = Math.min(c.maxMana, c.mana + PERFECT_DODGE_MANA);
+          this.emit({ kind: "perfect", sourceId: source.id, targetId: t.id, amount: 0, crit: false, x: t.x, y: t.y });
+        }
         return;
       }
+      // Guard: frontal only. First 8 frames of the guard = parry.
+      if (c.state === "guard" && isInFront(t.x, t.y, t.yaw, source.x, source.y)) {
+        const guardAge = this.frame - (c.guardSinceFrame ?? this.frame);
+        if (guardAge <= PARRY_WINDOW_FRAMES) {
+          this.emit({ kind: "parry", sourceId: source.id, targetId: t.id, amount: 0, crit: false, x: t.x, y: t.y });
+          this.staggerAttacker(source.id);
+          return;
+        }
+      }
+    }
+    let dmgMult = 1;
+    let finalPoise = poiseDmg;
+    if (t.kind === "player" && c.state === "guard" && isInFront(t.x, t.y, t.yaw, source.x, source.y)) {
       dmgMult = 1 - GUARD_DAMAGE_REDUCTION;
       finalPoise = poiseDmg * dmgMult;
     }
     const crit = rollCrit(this.rng, BASE_CRIT_CHANCE);
     const bonus = comboStateBonus(c.state, c.comboHits);
-    const dmg = Math.max(1, Math.round(damageAmount(atk, mult, t.def, crit, rollVariance(this.rng), bonus) * dmgMult));
+    const dmg = Math.max(1, Math.round(damageAmount(source.atk, mult, t.def, crit, rollVariance(this.rng), bonus) * dmgMult));
     c.hp = Math.max(0, c.hp - dmg);
     c.comboHits += 1;
     c.lastHitFrame = this.frame;
-    this.emit({ kind: "hit", sourceId, targetId: t.id, amount: dmg, crit, finisher, x: t.x, y: t.y });
-    if (effect === "knockback") this.pushBack(t, syaw, 0.6);
-    if (applyPoise(c, finalPoise, this.frame, this.targetSuperArmor(t)) === "stagger") this.stagger(t);
-    if (finisher && c.state !== "dead") this.knockdown(t);
-    if (effect === "knockdown" && c.state !== "dead") this.knockdown(t);
-    if (c.hp <= 0) {
-      c.hp = 0;
-      c.state = "dead";
-      c.stateFrame = 0;
+    this.emit({ kind: "hit", sourceId: source.id, targetId: t.id, amount: dmg, crit, finisher, x: t.x, y: t.y });
+    if (effect === "knockback") this.pushBack(t, source.yaw, 0.6);
+    const superArmor = t.kind === "player" && this.targetSuperArmor(t);
+    if (applyPoise(c, finalPoise, this.frame, superArmor) === "stagger") this.staggerTarget(t);
+    if (finisher && c.state !== "dead") this.knockdownTarget(t);
+    if (effect === "knockdown" && c.state !== "dead") this.knockdownTarget(t);
+    if (c.hp <= 0) this.killTarget(t, source.id, crit);
+  }
+
+  /** Parry staggers whoever attacked — a player or a mob. */
+  private staggerAttacker(sourceId: number): void {
+    const attacker = this.players.get(sourceId);
+    if (attacker) {
+      this.staggerTarget(attacker);
+      return;
+    }
+    const mob = this.mobs.get(sourceId);
+    if (mob) this.staggerTarget(mob);
+  }
+
+  private staggerTarget(t: PlayerEntity | MobEntity): void {
+    const c = t.combat;
+    if (c.state === "dead") return;
+    c.state = "stagger";
+    c.stateFrame = 0;
+    c.guardSinceFrame = null;
+    if (t.kind === "mob") t.aiState = "stagger";
+  }
+
+  private knockdownTarget(t: PlayerEntity | MobEntity): void {
+    const c = t.combat;
+    if (c.state === "dead") return;
+    c.state = "knockdown";
+    c.stateFrame = 0;
+    c.guardSinceFrame = null;
+    if (t.kind === "mob") t.aiState = "stagger"; // mobs recover from knockdown as stagger
+  }
+
+  private killTarget(t: PlayerEntity | MobEntity, sourceId: number, crit: boolean): void {
+    const c = t.combat;
+    c.hp = 0;
+    c.state = "dead";
+    c.stateFrame = 0;
+    this.emit({ kind: "kill", sourceId, targetId: t.id, amount: 0, crit, x: t.x, y: t.y });
+    if (t.kind === "player") {
       t.deadUntilFrame = this.frame + 300; // respawn after 5 s
-      this.emit({ kind: "kill", sourceId, targetId: t.id, amount: 0, crit, x: t.x, y: t.y });
+    } else {
+      t.respawnFrame = this.frame + Math.round(t.data.respawnS * 60);
+      t.aiState = "dead";
     }
   }
 
-  private pushBack(t: PlayerEntity, yaw: number, distM: number): void {
+  private pushBack(t: { x: number; y: number; extraM: number }, yaw: number, distM: number): void {
     const half = ZONE.zone.sizeM / 2;
     t.x = Math.max(-half, Math.min(half, t.x + Math.sin(yaw) * distM));
     t.y = Math.max(-half, Math.min(half, t.y + Math.cos(yaw) * distM));
@@ -566,7 +626,7 @@ export class ZoneWorld {
             p.x += Math.sin(p.yaw) * perFrame;
             p.y += Math.cos(p.yaw) * perFrame;
             p.extraM += perFrame;
-            this.resolveHit(p.id, `atk${c.chainIndex}`, p.x, p.y, p.yaw, p.atk, 2.5, 140, hit.mult, hit.poise, hit.finisher === true);
+            this.resolveHit(p, `atk${c.chainIndex}`, 2.5, 140, hit.mult, hit.poise, hit.finisher === true);
           }
           if (c.stateFrame >= chainTotalFrames(hit)) {
             c.state = "idle";
@@ -595,7 +655,7 @@ export class ZoneWorld {
                 }
               } else if (skill.kind === "damage") {
                 this.resolveHit(
-                  p.id, `sk${w.from}`, p.x, p.y, p.yaw, p.atk,
+                  p, `sk${w.from}`,
                   w.shape.radius ?? 2.5, w.shape.angle ?? 140,
                   w.hit.mult ?? 1, w.hit.poise ?? 0, false, w.hit.effect,
                 );
