@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyClassPreset,
   BODY_MORPH_KEYS,
   FACE_MORPH_KEYS,
   HAIR_STYLES,
@@ -53,6 +54,20 @@ describe("charforge v1", () => {
     expect(g.body.height).toBe(0.8);
     expect(g.hair.style).toBe("bun_04");
     expect(validateGenome(g)).toBe(true);
+  });
+
+  it("applyClassPreset sets class, theme and body shape", () => {
+    const base = generateGenome(99);
+    const g = applyClassPreset(base, "guardiao");
+    expect(g.classId).toBe("guardiao");
+    expect(g.outfit.theme).toBe("hanbok_armor");
+    expect(g.body.shoulders).toBe(0.5);
+    expect(g.body.muscle).toBe(0.5);
+    // Untouched fields survive the preset.
+    expect(g.hair.style).toBe(base.hair.style);
+    expect(validateGenome(g)).toBe(true);
+    const e = applyClassPreset(base, "espadachim");
+    expect(e.outfit.theme).toBe("cheongsam_blade");
   });
 
   it("generateGenomeFromName is deterministic", () => {

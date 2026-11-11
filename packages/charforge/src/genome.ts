@@ -74,10 +74,11 @@ export interface CharacterGenome {
   v: 1;
   seed: number;
   gender: "f" | "m";
-  /** Playable class. Default "espadachim" (only playable class in M1/M2);
-   *  the creator lets the player pick the class first or last — the genome
-   *  just stores the choice, so the order costs no refactor (M3 unlocks
-   *  guardiao/atirador/clerigo). */
+  /** Playable class. Default "espadachim" (only playable class in M1/M2).
+   *  Decisão de design do Jose (M2): no criador, a classe é escolhida
+   *  PRIMEIRO e a customização vem depois — a classe define corpo/roupa
+   *  iniciais via `applyClassPreset`. M3 desbloqueia guardiao/atirador/
+   *  clerigo como jogáveis. */
   classId: ClassId;
   body: BodyMorphs;
   face: FaceMorphs & { preset: FacePreset };
@@ -157,6 +158,31 @@ export function generateGenome(seed: number, overrides: GenomeOverrides = {}): C
 
 export function generateGenomeFromName(name: string): CharacterGenome {
   return generateGenome(hashSeed(name));
+}
+
+/**
+ * Class presets: picking a class first sets the starting body shape and
+ * outfit theme (the player then customizes from there). Values are morph
+ * offsets applied on top of the seeded genome.
+ */
+export const CLASS_PRESETS: Record<ClassId, { theme: OutfitTheme; body: Partial<BodyMorphs> }> = {
+  espadachim: { theme: "cheongsam_blade", body: { shoulders: 0.1, muscle: 0.2 } },
+  guardiao: { theme: "hanbok_armor", body: { shoulders: 0.5, muscle: 0.5, waist: 0.1 } },
+  atirador: { theme: "desert_nomad", body: { shoulders: 0.2, muscle: 0.1, legLen: 0.1 } },
+  clerigo: { theme: "noble_robe", body: { shoulders: -0.2, muscle: -0.2, hips: 0.1 } },
+};
+
+/** Return a copy of the genome with the class preset applied. */
+export function applyClassPreset(genome: CharacterGenome, classId: ClassId): CharacterGenome {
+  const preset = CLASS_PRESETS[classId];
+  const out: CharacterGenome = {
+    ...genome,
+    classId,
+    body: { ...genome.body, ...preset.body },
+    outfit: { theme: preset.theme, palette: OUTFIT_PALETTES[preset.theme] },
+  };
+  for (const k of BODY_MORPH_KEYS) out.body[k] = clampAdult(out.body[k]);
+  return out;
 }
 
 const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
