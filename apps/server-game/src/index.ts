@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import { ZONE } from "@azure-edge/gamedata";
 import {
@@ -25,9 +26,30 @@ function log(msg: string, fields: Record<string, unknown> = {}): void {
   console.log(JSON.stringify({ ts: new Date().toISOString(), msg, ...fields }));
 }
 
-const wss = new WebSocketServer({ host: HOST, port: PORT });
+// Minimal HTTP surface so free hosts (e.g. Render) can health-check the
+// service and keep-alive pings have something to hit: GET /healthz -> 200.
+// WebSocket upgrades are handled by `ws` on the same server/port.
+const httpServer = createServer((req, res) => {
+  if (req.url === "/healthz" || req.url === "/") {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        service: "azure-edge-server-game",
+        zone: ZONE.zone.id,
+        tick: world.tick,
+        players: world.players.size,
+      }),
+    );
+    return;
+  }
+  res.writeHead(404);
+  res.end();
+});
 
-wss.on("listening", () => {
+const wss = new WebSocketServer({ server: httpServer });
+
+httpServer.listen(PORT, HOST, () => {
   log("server-game listening", { port: PORT, zone: ZONE.zone.id, tickHz: world.tickRate });
 });
 

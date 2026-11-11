@@ -18,8 +18,14 @@ import { WorldView } from "./render.js";
 
 const params = new URLSearchParams(window.location.search);
 const simulatedLatencyMs = Number(params.get("latency") ?? 0) || 0;
+// Deploy-ready: on an https:// page the browser blocks plain ws://
+// (mixed content), so default to wss:// there. `?server=` still wins,
+// then the build-time VITE_GAME_SERVER_URL (e.g. wss://…onrender.com).
+const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
 const serverUrl =
-  params.get("server") ?? `ws://${window.location.hostname || "localhost"}:3001`;
+  params.get("server") ??
+  import.meta.env.VITE_GAME_SERVER_URL ??
+  `${wsProtocol}://${window.location.hostname || "localhost"}:3001`;
 const playerName = params.get("name") ?? `Player-${crypto.randomUUID().slice(0, 4)}`;
 
 const statusEl = document.getElementById("status") as HTMLElement;
