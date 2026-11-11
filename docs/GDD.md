@@ -24,7 +24,7 @@ Zonas iniciais: **Vila Lótus** (hub), **Dunas de Serket** (lv1-10: Oásis dos N
 | Clérigo | Suporte/cura sagrada | Foco sagrado | Cura, buffs, proteção |
 | Espadachim | Dano corpo a corpo/combo | Duas espadas | Combos rápidos, contra-ataque |
 Qualquer classe pode ser de qualquer gênero (customização). Futuro: Assassino (adagas), Lanceiro, Invocador.
-> Decisão de design 2026-11-11 (Jose): este conjunto substitui o original (Lâmina/Guardião/Arqueira/Mística). Nomes confirmados: Clérigo e Espadachim. Cada classe tem 1 skill além do básico no M1 (nomes em pt-BR, ainda a decidir). Classe de teste do M1: Espadachim. Mob do M1: lobo (a confirmar se continua ou se os insetos pequenos do Oásis o substituem). Mapa do M1: Dunas de Serket, deserto estilo Sigmund (Aika) como referência de estilo apenas — assets e nomes originais, sem copiar o mapa.
+> Decisão de design 2026-11-11 (Jose): este conjunto substitui o original (Lâmina/Guardião/Arqueira/Mística). Nomes confirmados: Clérigo e Espadachim. Skills do M1 (1 por classe, pt-BR): Espadachim — Corte Crescente; Guardião — Provocação (taunt + vida temporária, custa mana); Atirador — Disparo Rápido (2 tiros, recarga rápida); Clérigo — Bênção Solar (buff de proteção, reduz dano recebido). Classe de teste do M1: Espadachim. Mobs do M1: insetoides (escorpiões, formigas gigantes, besouros) e múmias; o lobo fica para depois. Mapa do M1: Dunas de Serket, deserto estilo Sigmund (Aika) como referência de estilo apenas — assets e nomes originais, sem copiar o mapa.
 
 ## 6. Combate (ver COMBAT_SPEC.md)
 - Ataque básico com cadeia de 3-4 golpes; botão de skill (1-8 + 2 ultimates); esquiva com i-frames; guarda; **Agarrar** (inimigos pequenos/médios: arremessar, usar como projétil; objetos do cenário).
