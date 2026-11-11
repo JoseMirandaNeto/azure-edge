@@ -19,11 +19,12 @@ Zonas iniciais: **Vila Lótus** (hub), **Floresta do Orvalho** (lv1-10), **Mina 
 ## 5. Classes (lançamento: 4; 2 variantes visuais de gênero com igual conteúdo)
 | Classe | Papel | Arma | Identidade |
 |---|---|---|---|
-| Lâmina (Blade) | Dano corpo a corpo/combo | Espada longa | Combos rápidos, contra-ataque |
-| Guardião (Warden) | Tank/controle | Espada e escudo / martelo | Agarrar, taunt, quebrar postura |
-| Arqueira (Windshot) | Dano à distância | Arco | Mobilidade, dano crítico, traps |
-| Mística (Mystic) | Suporte/AoE | Bastão/leque | Cura, buffs, magias em área |
+| Guardião (Warden) | Tank/controle | Escudo e arma | Agarrar, taunt, quebrar postura |
+| Atirador (Gunner) | Dano à distância | Espingarda | Tiro pesado, mobilidade, pressão à distância |
+| Clérigo (nome provisório — confirmar com Jose) | Suporte/cura sagrada | Foco sagrado | Cura, buffs, proteção |
+| Duelista (nome provisório — confirmar com Jose) | Dano corpo a corpo/combo | Duas espadas | Combos rápidos, contra-ataque |
 Qualquer classe pode ser de qualquer gênero (customização). Futuro: Assassino (adagas), Lanceiro, Invocador.
+> Decisão de design 2026-11-11 (Jose): este conjunto substitui o original (Lâmina/Guardião/Arqueira/Mística). Cada classe tem 1 skill além do básico no M1 (nomes em pt-BR). Classe de teste do M1: Duelista. Mob do M1: lobo. Mapa do M1: deserto estilo Sigmund (Aika) como referência de estilo apenas — assets e nomes originais, sem copiar o mapa. Nome do deserto pendente de decisão do Jose.
 
 ## 6. Combate (ver COMBAT_SPEC.md)
 - Ataque básico com cadeia de 3-4 golpes; botão de skill (1-8 + 2 ultimates); esquiva com i-frames; guarda; **Agarrar** (inimigos pequenos/médios: arremessar, usar como projétil; objetos do cenário).
