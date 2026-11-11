@@ -76,6 +76,18 @@ Browser (Vite + Three.js WebGPU/WebGL2)
 | Download inicial (build) | ~1,35 MB JS total (726 KB app + 622 KB three.webgpu, gzip ~366 KB) | ≤ 25 MB |
 | FPS no navegador | **não medido aqui** — sem navegador headless utilizável neste ambiente (ver Riscos) | 60 fps |
 
+## Criador de personagem (M2 — CharForge v1)
+
+Na primeira visita (ou com `?creator=1`), o jogo abre o criador antes da
+zona: **passo 1, escolha a classe** (Espadachim jogável; Guardião,
+Atirador e Clérigo definem o visual e entram no M3); **passo 2,
+customize** — nome (define a seed), gênero, sliders de corpo/rosto,
+6 cabelos, 6 roupas, pele e olhos, com preview 3D e botão Exportar GLB.
+O genoma fica salvo no navegador (`localStorage`) e o personagem criado
+substitui a cápsula do jogador local; o botão **Personagem** no HUD
+reabre o criador. `node apps/tools/dist/index.js export <seed> <file.glb>`
+exporta o personagem em GLB. Medido: LOD0 com 4 draw calls e 3.200 tris.
+
 ## Limitações conhecidas (M1)
 
 - M1 implementado e testado no servidor (combate, mobs, skills em dados);

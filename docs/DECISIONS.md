@@ -105,3 +105,44 @@ Formato: `ADR-00N | data | contexto | decisão | alternativas | consequências`.
   Bênção Solar só existe como dados + mecânica de mob até o Guardião/Clérigo
   chegarem (M3); a sensação do combate (peso, hit-stop) ainda precisa do
   playtest do Jose no Brave — sem browser headless utilizável aqui.
+
+## ADR-007 | 2026-11-11 | CharForge v1 (M2): genoma expandido, builder procedural em engine-adapter, criador com classe primeiro
+
+- **Contexto**: M2 pede base mesh F/M, 20+20 morphs, 6 cabelos, 6 roupas,
+  shader anime, criador, LODs e exporte GLB — com orçamento zero (nada de
+  assets externos) e sem mexer no protocolo do servidor (sync é M4).
+  Decisão de design do Jose: no criador, **escolhe a classe primeiro** e
+  depois customiza; a classe define corpo/roupa iniciais.
+- **Decisão**: (1) Genoma v1 em `packages/charforge`: 20 morphs corpo +
+  20 rosto (-1..1, prior gaussiano truncado), catálogos com 6 cabelos /
+  6 roupas / 6 tons de pele / 6 íris, `classId` + `applyClassPreset`
+  (corpo/roupa iniciais por classe), `validateGenome` adulto-apenas
+  (sem preset jovem/infantil). (2) O builder procedural vive em
+  `packages/engine-adapter` (que passa a depender de `three`): ele é a
+  camada que isola o three.js, então client e tools usam o mesmo builder
+  — o docstring antigo que mandava a implementação p/ `apps/client/src/
+  render/` estava defasado e foi corrigido. (3) Personagem = primitivas
+  paramétricas fundidas por material (corpo, cabelo, roupa, armas):
+  4 draw calls, MeshToonMaterial + rampa cel de 3 tons, LOD0/1/2 por
+  segmentos e LOD3 impostor cápsula. (4) Criador no client com 2 passos
+  (classe → customização), preview 3D próprio, genoma em localStorage;
+  o personagem substitui a cápsula do jogador local (fallback sem
+  genoma); remotos seguem cápsulas até o M4. (5) Exporte GLB via
+  GLTFExporter (CLI em tools com polyfill mínimo de FileReader p/ Node
+  + botão no criador).
+- **Alternativas**: base mesh externa licenciada (sem orçamento e sem
+  tempo de curadoria de licença p/ M2); rig esquelético de 65 ossos
+  (adiado p/ M3+ — o merge estático impede animação de membros, e a
+  animação v1 é de corpo inteiro); builder duplicado em client e tools
+  (rejeitado — uma única fonte de verdade no engine-adapter).
+- **Consequências / riscos**: LOD0 medido em 4 draw calls / 3.200 tris
+  (orçamento: ≤6 draws, ≤60k tris); o visual é estilizado-primitivo
+  (qualidade de arte depende de revisão do Jose — as proporções são
+  paramétricas, não modeladas à mão); classes não-Espadachim mostram a
+  arma da classe mas jogam com a mecânica do Espadachim no M2;
+  `pnpm install` não consegue reescrever o `pnpm-lock.yaml` neste
+  ambiente (EPERM no chown do arquivo temporário) — as entradas de
+  importers foram editadas à mão e validadas com o install offline; o
+  lockfile já tinha uma divergência pré-existente (root `@types/node`
+  fora do lockfile), então `--frozen-lockfile` falha por motivo anterior
+  ao M2.

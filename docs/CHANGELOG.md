@@ -20,6 +20,49 @@
 - Pendente de validação visual: FPS no navegador (sem browser headless utilizável
   neste ambiente; ver README.md).
 
+## [0.4.0] — 2026-11-11 — Milestone M2 CharForge v1
+
+- **Genoma v1** (`packages/charforge`): 20 morphs de corpo + 20 de rosto
+  (-1..1, prior gaussiano truncado), 6 cabelos, 6 roupas, 6 tons de pele,
+  6 cores de íris/cabelo, paletas por tema (azul-jade/vermelho-carmim/
+  dourado, GDD §10), `classId` (padrão Espadachim), `validateGenome`
+  (adultos apenas — sem preset jovem/infantil). `applyClassPreset`:
+  escolher a classe define corpo/roupa iniciais (decisão de design do
+  Jose: **classe primeiro, depois customização**).
+- **Builder procedural** (`packages/engine-adapter/src/character.ts`):
+  humanoide paramétrico F/M a partir de primitivas (lathe p/ torso,
+  esferas/cilindros p/ membros e rosto), morphs como escala/deslocamento
+  por parte, peças fundidas por material → **4 draw calls/personagem**,
+  shader anime via `MeshToonMaterial` + rampa cel de 3 tons, armas por
+  classe (duas espadas, espada+escudo, espingarda, cajado). LODs por
+  distância: LOD0/1/2 por segmentos, LOD3 impostor cápsula.
+- **Criador de personagem** (`apps/client/src/creator.ts` + overlay em
+  `index.html`): passo 1 — 4 cards de classe (só Espadachim jogável no
+  M2, demais marcadas "M3 · em breve"); passo 2 — nome (define a seed),
+  gênero, 8 sliders de corpo + 8 de rosto, 6 cabelos, 6 roupas, pele,
+  olhos, Sortear, preview 3D com órbita por arrastar e **Exportar GLB**.
+  Abre antes de entrar na zona (sem genoma salvo ou `?creator=1`);
+  botão "Personagem" no HUD reabre sobre o jogo. Genoma salvo em
+  `localStorage` (`azure-edge:genome:v1`); sincronização multiplayer é M4.
+- **No jogo**: o personagem criado substitui a cápsula do jogador local
+  (fallback p/ cápsula sem genoma); jogadores remotos continuam cápsulas
+  até o M4. Animação v1 é de corpo inteiro (bob + lean) — sem rig
+  esquelético (dívida p/ M3+).
+- **Exporte GLB** (`apps/tools export <seed> <file.glb> [lod]`): GLTFExporter
+  no Node com polyfill mínimo de FileReader; mesmo builder do client.
+  `validate` agora checa 1000 seeds e imprime métricas LOD.
+- Medido: **1000 seeds sem erro** (teste); LOD0 **4 draw calls, 3.200 tris,
+  1,62 m**; LOD1 1.605 tris; LOD2 940 tris; LOD3 1 draw call, 70 tris;
+  200 seeds constroem o mesh sem erro; GLB LOD0 com 156.668 bytes.
+  Verificado: `pnpm test` 68/68 verde, `pnpm build` 8/8, `pnpm typecheck`
+  8/8. Flake conhecido (pré-existente, M1): o teste de p99 do tick do
+  servidor falha às vezes sob contenção de CPU na VM compartilhada —
+  re-rodado sozinho passa 21/21. FPS no criador e no jogo com o
+  personagem ainda dependem do playtest no Brave do Jose (sem browser
+  headless utilizável aqui).
+- Limitação conhecida: classes não-Espadachim mostram a arma da classe no
+  visual, mas a mecânica de combate continua a do Espadachim no M2.
+
 ## [0.3.1] — 2026-11-11 — Iteração M1: captura do mouse + órbita da câmera
 
 - **Mouse-look (feedback do playtest do Jose)**: clicar no jogo captura o
