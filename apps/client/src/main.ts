@@ -1,7 +1,11 @@
 import { ZONE } from "@azure-edge/gamedata";
 import {
+  REMOTE_INTERP_BUFFER_MS,
+  decayCorrection,
+  interpolateRemote,
+  reconcilePrediction,
   stepMovement,
-  TICK_DT_S,
+  type RemoteSample,
   type EntityState,
   type InputPayload,
   type SimState,
@@ -89,10 +93,20 @@ let lastInput: InputPayload = {
   seq: 0, tick: 0, moveX: 0, moveY: 0, yaw: 0, buttons: 0, skillId: 0,
 };
 let rejects = 0;
+/** Correction offset: the part of a reconciliation error not yet glided away.
+ *  Display position = predicted + correction, so a snapshot never jumps the
+ *  capsule on screen; the offset decays to zero in ~120 ms. */
+let corrX = 0;
+let corrY = 0;
+/** Received snapshot samples per remote entity (local receipt timestamps). */
+const remoteHistory = new Map<number, RemoteSample[]>();
 
 const client = new GameClient(serverUrl, simulatedLatencyMs, {
   onWelcome(w: WelcomePayload) {
     playerId = w.playerId;
+    corrX = 0;
+    corrY = 0;
+    remoteHistory.clear();
     statusEl.textContent = `Conectado — zona ${w.zoneId} · tick ${w.tickRate} Hz`;
     playerEl.textContent = `Você é o jogador #${w.playerId} · backend: ${view.backend}`;
     const me = w.entities.find((e) => e.id === w.playerId);
@@ -104,23 +118,41 @@ const client = new GameClient(serverUrl, simulatedLatencyMs, {
   onSnapshot(snap: SnapshotPayload) {
     lastSnapshot = snap;
     if (playerId === null) return;
+    // Record receipt times for the remote interpolation buffer.
+    const nowMs = performance.now();
+    for (const e of snap.entities) {
+      if (e.id === playerId) continue;
+      const history = remoteHistory.get(e.id) ?? [];
+      history.push({ tMs: nowMs, x: e.x, y: e.y, yaw: e.yaw, animState: e.animState });
+      if (history.length > 8) history.splice(0, history.length - 8);
+      remoteHistory.set(e.id, history);
+    }
     const me = snap.entities.find((e) => e.id === playerId);
     if (!me) return;
-    // Reconciliation: rewind to the authoritative state, then re-apply
-    // inputs the server has not acked yet (each input = one server tick).
-    const dx = me.x - predicted.x;
-    const dy = me.y - predicted.y;
-    if (Math.hypot(dx, dy) > 0.5) {
-      predicted = { x: me.x, y: me.y, yaw: me.yaw, moving: me.animState === 1 };
+    // Smooth reconciliation: rewind to the authoritative state and re-apply
+    // unacked inputs; the remaining error glides away instead of teleporting
+    // (only errors > 2 m snap — respawn / hard desync).
+    const authoritative: SimState = { x: me.x, y: me.y, yaw: me.yaw, moving: me.animState === 1 };
+    const result = reconcilePrediction(
+      predicted,
+      authoritative,
+      unacked,
+      snap.ackSeq,
+      ZONE.player.walkSpeedMps,
+    );
+    if (result.teleport) {
+      predicted = result.corrected;
+      corrX = 0;
+      corrY = 0;
       unacked.length = 0;
     } else {
-      predicted = { x: me.x, y: me.y, yaw: me.yaw, moving: me.animState === 1 };
-      const stillPending = unacked.filter((u) => u.seq > snap.ackSeq);
+      // Keep the on-screen position continuous: fold the error into the
+      // correction offset instead of moving the capsule.
+      corrX -= result.deltaX;
+      corrY -= result.deltaY;
+      predicted = result.corrected;
       unacked.length = 0;
-      unacked.push(...stillPending);
-      for (const u of stillPending) {
-        predicted = stepMovement(predicted, u.input, TICK_DT_S, ZONE.player.walkSpeedMps);
-      }
+      unacked.push(...result.stillPending);
     }
   },
   onReject(_seq: number, reason: string) {
@@ -167,20 +199,38 @@ function frame(now: number): void {
     client.sendInput(input);
   }
 
+  // Glide the reconciliation correction away (~120 ms time constant).
+  corrX = decayCorrection(corrX, dt);
+  corrY = decayCorrection(corrY, dt);
+  if (Math.abs(corrX) < 0.001) corrX = 0;
+  if (Math.abs(corrY) < 0.001) corrY = 0;
+  const displayX = predicted.x + corrX;
+  const displayY = predicted.y + corrY;
+
   // Render world.
   if (lastSnapshot && playerId !== null) {
+    // Render remote entities ~100 ms in the past, interpolated between the
+    // two snapshots bracketing that instant (AGENTS.md §4).
+    const renderTimeMs = now - REMOTE_INTERP_BUFFER_MS;
     for (const e of lastSnapshot.entities) {
       const isLocal = e.id === playerId;
-      const shown: EntityState = isLocal
-        ? { ...e, x: predicted.x, y: predicted.y, yaw: cameraYaw, animState: predicted.moving ? 1 : 0 }
-        : e;
-      view.updatePlayer(shown, isLocal, dt);
+      let shown: EntityState;
+      if (isLocal) {
+        shown = { ...e, x: displayX, y: displayY, yaw: cameraYaw, animState: predicted.moving ? 1 : 0 };
+      } else {
+        const interp = interpolateRemote(remoteHistory.get(e.id) ?? [], renderTimeMs);
+        shown = interp
+          ? { ...e, x: interp.x, y: interp.y, yaw: interp.yaw, animState: interp.animState }
+          : e;
+      }
+      view.updatePlayer(shown, isLocal);
     }
-    const seen = new Set(lastSnapshot.entities.map((e) => e.id));
-    // (Removal is handled on the next snapshot; stale meshes are rare in M0.)
-    void seen;
+    // Drop history for entities that left the zone.
+    for (const id of [...remoteHistory.keys()]) {
+      if (!lastSnapshot.entities.some((e) => e.id === id)) remoteHistory.delete(id);
+    }
   }
-  view.updateCamera(predicted.x, predicted.y, cameraYaw);
+  view.updateCamera(displayX, displayY, cameraYaw, dt);
   view.render();
 
   if (now - lastDebugUpdate > 250) {
@@ -193,7 +243,7 @@ function frame(now: number): void {
       `ping: ${client.rttMs.toFixed(0)} ms (sim ${simulatedLatencyMs} ms)\n` +
       `lost snapshots: ${client.lostSnapshots}  rejects: ${rejects}\n` +
       `players: ${lastSnapshot?.entities.length ?? 0}  server tick: ${lastSnapshot?.serverTick ?? "-"}\n` +
-      `pos: ${predicted.x.toFixed(1)}, ${predicted.y.toFixed(1)}  seq: ${seq}`;
+      `pos: ${displayX.toFixed(1)}, ${displayY.toFixed(1)}  seq: ${seq}  corr: ${Math.hypot(corrX, corrY).toFixed(2)}`;
   }
 }
 

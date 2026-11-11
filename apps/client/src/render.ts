@@ -9,7 +9,8 @@ export interface RendererLike {
   setSize(w: number, h: number): void;
   render(scene: THREE.Scene, camera: THREE.Camera): void;
   setAnimationLoop(cb: ((time: number) => void) | null): void | Promise<void>;
-  info: { render: { calls: number; triangles: number } };
+  // WebGPU has drawCalls (per-frame); WebGL2 only has calls (per-frame).
+  info: { render: { calls: number; drawCalls?: number; triangles: number } };
 }
 
 const WORLD_TO_THREE = (x: number, y: number): [number, number, number] => [x, 0, -y];
@@ -57,7 +58,12 @@ export class WorldView {
   renderer!: RendererLike;
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
-  private readonly players = new Map<number, { group: THREE.Group; target: THREE.Vector3 }>();
+  private readonly players = new Map<number, { group: THREE.Group }>();
+  private readonly camPos = new THREE.Vector3();
+  private readonly camFocus = new THREE.Vector3();
+  private readonly camPosTarget = new THREE.Vector3();
+  private readonly camFocusTarget = new THREE.Vector3();
+  private camReady = false;
 
   constructor(private readonly container: HTMLElement) {
     this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 500);
@@ -156,8 +162,13 @@ export class WorldView {
     }
   }
 
-  /** Local player: set directly (prediction). Remote: smooth-lerp to target. */
-  updatePlayer(e: EntityState, isLocal: boolean, dt: number): void {
+  /**
+   * Positions come pre-smoothed from main.ts: the local player from
+   * prediction + reconciliation glide, remotes from the ~100 ms snapshot
+   * interpolation buffer. This method just places the mesh (plus walk bob) —
+   * no extra lerp here, or the entity would lag twice (buffer + lerp).
+   */
+  updatePlayer(e: EntityState, isLocal: boolean): void {
     let entry = this.players.get(e.id);
     if (!entry) {
       const color = isLocal ? 0x2f7de1 : 0xe15a2f;
@@ -165,19 +176,12 @@ export class WorldView {
       this.scene.add(group);
       const [x, , z] = WORLD_TO_THREE(e.x, e.y);
       group.position.set(x, terrainHeight(x, z), z);
-      entry = { group, target: new THREE.Vector3(x, 0, z) };
+      entry = { group };
       this.players.set(e.id, entry);
     }
     const [tx, , tz] = WORLD_TO_THREE(e.x, e.y);
     const ty = terrainHeight(tx, tz);
-    if (isLocal) {
-      entry.group.position.set(tx, ty, tz);
-      entry.target.set(tx, ty, tz);
-    } else {
-      entry.target.set(tx, ty, tz);
-      const k = Math.min(1, dt * 12);
-      entry.group.position.lerp(entry.target, k);
-    }
+    entry.group.position.set(tx, ty, tz);
     // Mesh forward is -Z; world yaw maps to rotation.y = -yaw.
     entry.group.rotation.y = -e.yaw;
     // Simple walk bob so movement reads on screen.
@@ -193,14 +197,28 @@ export class WorldView {
     }
   }
 
-  updateCamera(playerX: number, playerY: number, yaw: number): void {
+  /**
+   * Smoothed camera: the focus point and the camera position glide toward
+   * their targets (~90 ms time constant) instead of snapping to the predicted
+   * position every frame, so reconciliation corrections don't shake the screen.
+   */
+  updateCamera(playerX: number, playerY: number, yaw: number, dt: number): void {
     const { distanceM, heightM } = ZONE.camera;
     const [px, , pz] = WORLD_TO_THREE(playerX, playerY);
     const py = terrainHeight(px, pz);
-    const cx = px - Math.sin(yaw) * distanceM;
-    const cz = pz + Math.cos(yaw) * distanceM;
-    this.camera.position.set(cx, py + heightM, cz);
-    this.camera.lookAt(px, py + 1.4, pz);
+    this.camPosTarget.set(px - Math.sin(yaw) * distanceM, py + heightM, pz + Math.cos(yaw) * distanceM);
+    this.camFocusTarget.set(px, py + 1.4, pz);
+    if (!this.camReady) {
+      this.camPos.copy(this.camPosTarget);
+      this.camFocus.copy(this.camFocusTarget);
+      this.camReady = true;
+    } else {
+      const k = 1 - Math.exp(-Math.max(0, dt) / 0.09);
+      this.camPos.lerp(this.camPosTarget, k);
+      this.camFocus.lerp(this.camFocusTarget, k);
+    }
+    this.camera.position.copy(this.camPos);
+    this.camera.lookAt(this.camFocus);
   }
 
   render(): void {
@@ -208,9 +226,15 @@ export class WorldView {
   }
 
   getStats(): { calls: number; triangles: number } {
+    // three 0.182 WebGPURenderer: info.render.calls is CUMULATIVE since the
+    // app started (it counts render() invocations = frames), NOT per-frame
+    // draw calls — the F3 panel used to show 1742–4374 "draw calls" while the
+    // scene only draws ~65 meshes. The per-frame count is drawCalls (the
+    // WebGL2 fallback has no drawCalls field, so fall back to calls there).
+    const info = this.renderer.info.render;
     return {
-      calls: this.renderer.info.render.calls,
-      triangles: this.renderer.info.render.triangles,
+      calls: info.drawCalls ?? info.calls,
+      triangles: info.triangles,
     };
   }
 }
