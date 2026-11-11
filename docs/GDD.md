@@ -9,7 +9,7 @@ Jogadores 16+ de MMO/ação (BR, LATAM, SEA, EU). Browser (Chrome/Edge/Safari/Fi
 
 ## 3. Mundo e lore (resumo)
 Continente de **Haeran**, inspirado em fantasia asiática (reinos de montanha, cidades portuárias, templos, ruínas flutuantes). Uma fenda ("Azure Rift") despeja monstros; as Lâminas Azuis (jogadores) são mercenários/heróis. Todos os personagens jogáveis são adultos.
-Zonas iniciais: **Vila Lótus** (hub), **Dunas de Serket** (lv1-10: Oásis dos Nômades lv1-4 — área segura, missões de insetos pequenos; Tumbas Soterradas lv5-7 — primeiras múmias e a história do boss; O Ermo de Serket lv8-10 — área mais cinzenta e perigosa, boss Serket, múmia que reside em seu templo), **Mina Carmesim** (lv10-20), **Planície dos Ventos** (lv20-30), **Cidadela Rachada** (endgame inicial).
+Zonas iniciais: **Vila Lótus** (hub), **Dunas de Serket** (lv1-10: Oásis dos Nômades lv1-4 — área segura, missões de insetos pequenos; Tumbas Soterradas lv5-7 — primeiras múmias e a história do boss; O Ermo de Serket lv8-10 — área mais cinzenta e perigosa, boss Serket, mulher híbrida humana-escorpião que reside em seu templo), **Mina Carmesim** (lv10-20), **Planície dos Ventos** (lv20-30), **Cidadela Rachada** (endgame inicial).
 
 ## 4. Loop de jogo
 - Curto (2-5 min): lutar contra grupo de mobs, usar skills, coletar drops.
