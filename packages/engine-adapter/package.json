@@ -1,17 +1,26 @@
 {
+  "dependencies": {
+    "@azure-edge/charforge": "workspace:*",
+    "three": "^0.182.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.182.0",
+    "vitest": "^3.2.4"
+  },
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "default": "./dist/index.js",
+      "types": "./dist/index.d.ts"
     }
   },
   "name": "@azure-edge/engine-adapter",
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "type": "module",
-  "version": "0.1.0",
-  "types": "./dist/index.d.ts"
+  "types": "./dist/index.d.ts",
+  "version": "0.1.0"
 }

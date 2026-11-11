@@ -1,9 +1,10 @@
 /**
  * engine-adapter — isolates Three.js so a future native client (M8) can swap
  * the renderer without touching gameplay code (docs/ARCHITECTURE.md).
- * M0: interfaces + a capability probe. The Three.js implementation lives in
- * apps/client/src/render/ and is written against these interfaces.
+ * M0: interfaces + a capability probe. M2: the CharForge procedural
+ * character builder (three.js lives here; apps/client renders it).
  */
+export * from "./character.js";
 export type RendererBackend = "webgpu" | "webgl2";
 
 export interface RendererStats {

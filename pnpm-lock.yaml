@@ -90,7 +90,21 @@ importers:
         specifier: ^3.2.4
         version: 3.2.7(@types/node@26.6.6)
 
-  packages/engine-adapter: {}
+  packages/engine-adapter:
+    dependencies:
+      '@azure-edge/charforge':
+        specifier: workspace:*
+        version: link:../charforge
+      three:
+        specifier: ^0.182.0
+        version: 0.182.0
+    devDependencies:
+      '@types/three':
+        specifier: ^0.182.0
+        version: 0.182.0
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@26.6.6)
 
   packages/gamedata:
     devDependencies:
