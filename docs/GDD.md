@@ -9,7 +9,7 @@ Jogadores 16+ de MMO/ação (BR, LATAM, SEA, EU). Browser (Chrome/Edge/Safari/Fi
 
 ## 3. Mundo e lore (resumo)
 Continente de **Haeran**, inspirado em fantasia asiática (reinos de montanha, cidades portuárias, templos, ruínas flutuantes). Uma fenda ("Azure Rift") despeja monstros; as Lâminas Azuis (jogadores) são mercenários/heróis. Todos os personagens jogáveis são adultos.
-Zonas iniciais: **Vila Lótus** (hub), **Floresta do Orvalho** (lv1-10), **Mina Carmesim** (lv10-20), **Planície dos Ventos** (lv20-30), **Cidadela Rachada** (endgame inicial).
+Zonas iniciais: **Vila Lótus** (hub), **Dunas de Serket** (lv1-10: Oásis dos Nômades lv1-4 — área segura, missões de insetos pequenos; Tumbas Soterradas lv5-7 — primeiras múmias e a história do boss; O Ermo de Serket lv8-10 — área mais cinzenta e perigosa, boss Serket, múmia que reside em seu templo), **Mina Carmesim** (lv10-20), **Planície dos Ventos** (lv20-30), **Cidadela Rachada** (endgame inicial).
 
 ## 4. Loop de jogo
 - Curto (2-5 min): lutar contra grupo de mobs, usar skills, coletar drops.
@@ -21,10 +21,10 @@ Zonas iniciais: **Vila Lótus** (hub), **Floresta do Orvalho** (lv1-10), **Mina 
 |---|---|---|---|
 | Guardião (Warden) | Tank/controle | Escudo e arma | Agarrar, taunt, quebrar postura |
 | Atirador (Gunner) | Dano à distância | Espingarda | Tiro pesado, mobilidade, pressão à distância |
-| Clérigo (nome provisório — confirmar com Jose) | Suporte/cura sagrada | Foco sagrado | Cura, buffs, proteção |
-| Duelista (nome provisório — confirmar com Jose) | Dano corpo a corpo/combo | Duas espadas | Combos rápidos, contra-ataque |
+| Clérigo | Suporte/cura sagrada | Foco sagrado | Cura, buffs, proteção |
+| Espadachim | Dano corpo a corpo/combo | Duas espadas | Combos rápidos, contra-ataque |
 Qualquer classe pode ser de qualquer gênero (customização). Futuro: Assassino (adagas), Lanceiro, Invocador.
-> Decisão de design 2026-11-11 (Jose): este conjunto substitui o original (Lâmina/Guardião/Arqueira/Mística). Cada classe tem 1 skill além do básico no M1 (nomes em pt-BR). Classe de teste do M1: Duelista. Mob do M1: lobo. Mapa do M1: deserto estilo Sigmund (Aika) como referência de estilo apenas — assets e nomes originais, sem copiar o mapa. Nome do deserto pendente de decisão do Jose.
+> Decisão de design 2026-11-11 (Jose): este conjunto substitui o original (Lâmina/Guardião/Arqueira/Mística). Nomes confirmados: Clérigo e Espadachim. Cada classe tem 1 skill além do básico no M1 (nomes em pt-BR, ainda a decidir). Classe de teste do M1: Espadachim. Mob do M1: lobo (a confirmar se continua ou se os insetos pequenos do Oásis o substituem). Mapa do M1: Dunas de Serket, deserto estilo Sigmund (Aika) como referência de estilo apenas — assets e nomes originais, sem copiar o mapa.
 
 ## 6. Combate (ver COMBAT_SPEC.md)
 - Ataque básico com cadeia de 3-4 golpes; botão de skill (1-8 + 2 ultimates); esquiva com i-frames; guarda; **Agarrar** (inimigos pequenos/médios: arremessar, usar como projétil; objetos do cenário).
