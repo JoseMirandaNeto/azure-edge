@@ -7,6 +7,7 @@ import {
   MessageType,
   PROTOCOL_VERSION,
   TICK_DT_S,
+  type EventPayload,
   type HelloPayload,
   type InputPayload,
   type PingPayload,
@@ -108,6 +109,33 @@ wss.on("connection", (ws: WebSocket) => {
 // Fixed 20 Hz tick + snapshot broadcast.
 setInterval(() => {
   world.step();
+  // Combat rejects validated at step time (client rolls the visual back).
+  for (const r of world.drainRejects()) {
+    for (const [ws, info] of clients) {
+      if (info.playerId === r.playerId && ws.readyState === ws.OPEN) {
+        ws.send(encodeMessage(MessageType.Reject, { seq: r.seq, reason: r.reason }));
+      }
+    }
+  }
+  // Combat events (hit / kill / parry / perfect / skill / heal) for VFX/SFX.
+  const events = world.drainEvents();
+  for (const e of events) {
+    const payload: EventPayload = {
+      eventId: e.eventId,
+      type: e.kind,
+      sourceId: e.sourceId,
+      targetId: e.targetId,
+      amount: e.amount,
+      crit: e.crit,
+      finisher: e.finisher,
+      x: e.x,
+      y: e.y,
+    };
+    const bytes = encodeMessage(MessageType.Event, payload);
+    for (const [ws] of clients) {
+      if (ws.readyState === ws.OPEN) ws.send(bytes);
+    }
+  }
   const snapshot: SnapshotPayload = {
     serverTick: world.tick,
     ackSeq: 0, // per-client ack is filled below
