@@ -53,3 +53,25 @@ Formato: `ADR-00N | data | contexto | decisão | alternativas | consequências`.
   (risco de licença, download extra).
 - **Consequências**: bundle inicial ~1,35 MB (dentro do orçamento de 25 MB);
   arte real e CharForge completo chegam em M2.
+
+## ADR-005 | 2026-11-11 | Reconciliação suave, câmera suave, buffer de interpolação e contador de draw calls
+
+- **Contexto**: com `?latency=100` (RTT ~550 ms via túnel) as cápsulas quicam e
+  a tela treme; o painel F3 mostrava 1742–4374 "draw calls" com só ~9700 tris.
+- **Decisão**: (1) reconciliação mantém rewind + re-apply dos inputs não
+  confirmados, mas o erro vira offset de correção que decai com tau ~120 ms;
+  teleport só se erro > 2 m. (2) câmera com lerp (tau 90 ms) em foco e posição.
+  (3) remoto renderizado ~100 ms no passado, interpolado entre os 2 snapshots
+  que cercam o instante (AGENTS.md §4), sem mudar o protocolo. (4) painel F3
+  lê `info.render.drawCalls` (por frame), com fallback para `calls` no WebGL2.
+- **Alternativas**: manter o teleporte > 0,5 m (quicar visível); buffer remoto
+  de 200 ms (mais lag visual); reescrever o renderer p/ instancing (sem
+  evidência de que os draws eram o problema — e não eram).
+- **Consequências / riscos**: o erro visual transitório fica visível por
+  ~120 ms em vez de sumir no teleporte (troca de exatidão instantânea por
+  suavidade); a 500 ms de RTT o erro residual pode chegar a ~3 m (RTT ×
+  velocidade) sem saltos — deploy real com ping menor reduz isso. Draws reais
+  ~65/frame no máximo (contagem de meshes), a confirmar no Brave. Medição
+  headless em `/tmp/latency-harness.mjs` (não commitado, servidor real, 2
+  clients): 100 ms → 0 saltos > 0,3 m (M0: 149); 500 ms → 0 (M0: 143).
+  Confirmação visual no Brave com `?latency=100` ainda pendente.
