@@ -20,6 +20,7 @@ const PORT = Number(process.env.PORT ?? 3001);
 const HOST = process.env.HOST ?? "0.0.0.0";
 
 const world = new ZoneWorld();
+world.spawnArenaMobs(); // M1 arena: escorpião (principal) + formiga, besouro, múmia
 const clients = new Map<WebSocket, { playerId: number; buffer: Buffer }>();
 
 function log(msg: string, fields: Record<string, unknown> = {}): void {
@@ -40,6 +41,7 @@ const httpServer = createServer((req, res) => {
         zone: ZONE.zone.id,
         tick: world.tick,
         players: world.players.size,
+        mobs: world.mobs.size,
       }),
     );
     return;

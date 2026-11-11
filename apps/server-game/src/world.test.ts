@@ -226,4 +226,101 @@ describe("ZoneWorld (authoritative)", () => {
     expect(b.combat.state).toBe("idle");
     expect(b.combat.hp).toBe(b.combat.maxHp);
   });
+
+  it("escorpião patrulha, persegue, telegrafa (windup) e ataca o jogador", () => {
+    const w = new ZoneWorld();
+    const p = w.addPlayer("A");
+    p.x = 0;
+    p.y = 0;
+    const mob = w.spawnMob("escorpiao", 0, 10);
+    expect(mob).not.toBeNull();
+    let sawWindup = false;
+    let sawChase = false;
+    for (let i = 0; i < 60; i += 1) {
+      w.step();
+      if (mob?.aiState === "chase") sawChase = true;
+      if (w.snapshot().some((e) => e.id === mob?.id && e.animState === 9)) sawWindup = true;
+      if (p.combat.hp < 100) break;
+    }
+    expect(sawChase).toBe(true);
+    expect(mob?.y).toBeLessThan(10); // moved toward the player
+    expect(sawWindup).toBe(true); // telegraphed attack (animState 9)
+    expect(p.combat.hp).toBeLessThan(100); // the attack landed
+  });
+
+  it("escorpião morre para os ataques do jogador e renasce após 8 s", () => {
+    const w = new ZoneWorld();
+    const a = w.addPlayer("A");
+    a.x = 0;
+    a.y = 0;
+    a.yaw = 0;
+    const mob = w.spawnMob("escorpiao", 0, 3);
+    expect(mob).not.toBeNull();
+    let seq = 1;
+    const attackLoop = (n: number) => {
+      for (let i = 0; i < n; i += 1) {
+        a.combat.hp = a.combat.maxHp; // keep the tester alive
+        // Face the mob every tick: the attack lunge moves the player forward,
+        // so without re-aiming the mob ends up behind the swing arc.
+        if (mob) a.yaw = Math.atan2(mob.x - a.x, mob.y - a.y);
+        if (a.combat.state === "idle" || a.combat.state === "move") {
+          w.applyInput(a.id, input(seq, 1, 0, a.yaw));
+          seq += 1;
+        }
+        w.step();
+        if (mob?.combat.state === "dead") break;
+      }
+    };
+    attackLoop(200);
+    expect(mob?.combat.state).toBe("dead");
+    expect(w.drainEvents().some((e) => e.kind === "kill" && e.targetId === mob?.id)).toBe(true);
+    expect(w.snapshot().some((e) => e.id === mob?.id)).toBe(false); // dead mobs leave the snapshot
+    for (let i = 0; i < 170; i += 1) w.step(); // 510 frames > 480 (8 s)
+    expect(mob?.combat.state).not.toBe("dead");
+    expect(mob?.combat.hp).toBe(60);
+    expect(w.snapshot().some((e) => e.id === mob?.id)).toBe(true);
+  });
+
+  it("taunt (Provocação) redireciona o mob para o jogador que provocou", () => {
+    const w = new ZoneWorld();
+    const a = w.addPlayer("A");
+    a.x = 0;
+    a.y = 0;
+    const b = w.addPlayer("B");
+    b.x = 20;
+    b.y = 20;
+    const mob = w.spawnMob("escorpiao", 0, 10);
+    for (let i = 0; i < 10; i += 1) w.step();
+    expect(mob?.targetId).toBe(a.id); // aggro on the near player first
+    w.tauntMobs(b.id, 30, 5);
+    for (let i = 0; i < 10; i += 1) w.step();
+    expect(mob?.targetId).toBe(b.id); // taunt overrides proximity
+    expect(mob?.x).toBeGreaterThan(0); // walking toward B
+    for (let i = 0; i < 110; i += 1) w.step(); // taunt (5 s) expires
+    // After expiry the mob keeps B only because B is now the nearest player
+    // (correct AI). Move B far away: the mob must drop the target.
+    b.x = 50;
+    b.y = 50;
+    for (let i = 0; i < 5; i += 1) w.step();
+    expect(mob?.targetId).not.toBe(b.id);
+  });
+
+  it("tick com 30 mobs fica abaixo do orçamento de 10 ms p99", () => {
+    const w = new ZoneWorld();
+    const a = w.addPlayer("A");
+    w.addPlayer("B");
+    w.spawnMobs("escorpiao", 30);
+    let seq = 1;
+    for (let i = 0; i < 200; i += 1) {
+      if (a.combat.state === "idle" || a.combat.state === "move") {
+        w.applyInput(a.id, input(seq, 1));
+        seq += 1;
+      }
+      w.step();
+    }
+    console.log(
+      `tick 30 mobs: avg ${w.tickMsAvg.toFixed(3)} ms, p99 ${w.tickMsP99().toFixed(3)} ms, max ${w.tickMsMax.toFixed(3)} ms`,
+    );
+    expect(w.tickMsP99()).toBeLessThan(10);
+  });
 });

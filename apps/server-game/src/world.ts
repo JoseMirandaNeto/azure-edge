@@ -96,6 +96,7 @@ export interface MobEntity {
   yaw: number;
   combat: Combatant;
   def: number;
+  atk: number;
   aiState: MobAiState;
   anchorX: number;
   anchorY: number;
@@ -195,6 +196,115 @@ export class ZoneWorld {
 
   removePlayer(id: number): void {
     this.players.delete(id);
+  }
+
+  // --- Mobs ---
+
+  /** Spawn one mob of a data-driven type at an anchor point. */
+  spawnMob(mobId: string, anchorX: number, anchorY: number): MobEntity | null {
+    const data = mobById(mobId);
+    if (!data) return null;
+    const id = this.nextMobId;
+    this.nextMobId += 1;
+    const m: MobEntity = {
+      id,
+      kind: "mob",
+      mobId,
+      name: data.name,
+      data,
+      x: anchorX,
+      y: anchorY,
+      yaw: 0,
+      combat: createCombatant(data.maxHp, 100, 0, data.poise),
+      def: data.def,
+      atk: data.atk,
+      aiState: "patrol",
+      anchorX,
+      anchorY,
+      patrolX: anchorX,
+      patrolY: anchorY,
+      targetId: null,
+      taunt: null,
+      respawnFrame: -1,
+      hitDone: new Set(),
+      extraM: 0,
+    };
+    this.mobs.set(id, m);
+    return m;
+  }
+
+  /** Spawn `count` mobs of one type, spread deterministically around the zone. */
+  spawnMobs(mobId: string, count: number): MobEntity[] {
+    const out: MobEntity[] = [];
+    for (let i = 0; i < count; i += 1) {
+      const angle = i * 2.399963;
+      const radius = 10 + (i % 5) * 6;
+      const m = this.spawnMob(mobId, Math.cos(angle) * radius, Math.sin(angle) * radius);
+      if (m) out.push(m);
+    }
+    return out;
+  }
+
+  /** Default M1 arena mix (Oásis dos Nômades): escorpião é o mob principal. */
+  spawnArenaMobs(): void {
+    const mix: Array<[string, number, number]> = [
+      ["escorpiao", 12, 6],
+      ["escorpiao", -10, 12],
+      ["escorpiao", 8, -14],
+      ["formiga", -14, -8],
+      ["besouro", 18, -6],
+      ["mumia", -8, 18],
+    ];
+    for (const [id, x, y] of mix) this.spawnMob(id, x, y);
+  }
+
+  /**
+   * Provocação (Guardião): mobs in radius redirect to the taunting player
+   * for durationS. The cast itself arrives with the Guardião (M3); the
+   * mob-side reaction is implemented and tested here.
+   */
+  tauntMobs(playerId: number, radiusM: number, durationS: number): void {
+    const p = this.players.get(playerId);
+    if (!p) return;
+    for (const m of this.mobs.values()) {
+      if (m.combat.state === "dead") continue;
+      if (Math.hypot(m.x - p.x, m.y - p.y) <= radiusM) {
+        m.taunt = { byPlayerId: playerId, untilFrame: this.frame + Math.round(durationS * 60) };
+      }
+    }
+  }
+
+  private nearestPlayer(x: number, y: number, maxDist: number): number | null {
+    let best: number | null = null;
+    let bestDist = maxDist;
+    for (const p of this.players.values()) {
+      if (p.combat.state === "dead") continue;
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d <= bestDist) {
+        bestDist = d;
+        best = p.id;
+      }
+    }
+    return best;
+  }
+
+  private pickPatrolPoint(m: MobEntity): void {
+    const angle = this.rng() * Math.PI * 2;
+    const radius = 4 + this.rng() * 16;
+    const half = ZONE.zone.sizeM / 2 - 2;
+    m.patrolX = Math.max(-half, Math.min(half, m.anchorX + Math.cos(angle) * radius));
+    m.patrolY = Math.max(-half, Math.min(half, m.anchorY + Math.sin(angle) * radius));
+  }
+
+  private moveMobToward(m: MobEntity, tx: number, ty: number, speedMps: number): void {
+    const dx = tx - m.x;
+    const dy = ty - m.y;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 1e-6) return;
+    const step = Math.min(dist, speedMps * FRAME_DT_S);
+    m.x += (dx / dist) * step;
+    m.y += (dy / dist) * step;
+    m.yaw = Math.atan2(dx, dy);
   }
 
   /** Queue a client input. Invalid inputs are rejected, never trusted. */
@@ -543,6 +653,7 @@ export class ZoneWorld {
     for (let s = 0; s < SUB_STEPS_PER_TICK; s += 1) {
       this.frame += 1;
       this.subStep();
+      for (const m of this.mobs.values()) this.stepMob(m);
     }
     // Server-side speed validation (walk cap + dodge/lunge/knockback allowance).
     for (const p of this.players.values()) {
@@ -721,6 +832,127 @@ export class ZoneWorld {
     }
   }
 
+  private stepMob(m: MobEntity): void {
+    const c = m.combat;
+    const d = m.data;
+    if (c.state === "dead") {
+      if (this.frame >= m.respawnFrame) {
+        c.hp = c.maxHp;
+        c.poise = c.poiseMax;
+        c.state = "idle";
+        c.stateFrame = 0;
+        m.x = m.anchorX;
+        m.y = m.anchorY;
+        m.aiState = "patrol";
+        m.targetId = null;
+        m.taunt = null;
+      }
+      return;
+    }
+    c.stateFrame += 1;
+    c.poise = Math.min(c.poiseMax, c.poise + (d.poiseRegenPerS / 60));
+    if (this.frame - c.lastHitFrame > 120) c.comboHits = 0;
+    // Stagger / knockdown pause the AI.
+    if (c.state === "stagger" || c.state === "knockdown") {
+      const total = c.state === "stagger" ? STAGGER_FRAMES : KNOCKDOWN_FRAMES;
+      if (c.stateFrame >= total) {
+        c.state = "idle";
+        c.stateFrame = 0;
+        m.aiState = "chase";
+      }
+      return;
+    }
+    // Target selection: an active taunt overrides everything.
+    if (m.taunt && this.frame >= m.taunt.untilFrame) m.taunt = null;
+    const taunted = m.taunt ? this.players.get(m.taunt.byPlayerId) : undefined;
+    if (taunted && taunted.combat.state !== "dead") {
+      m.targetId = taunted.id;
+    } else {
+      if (m.taunt) m.taunt = null;
+      if (m.targetId === null) {
+        m.targetId = this.nearestPlayer(m.x, m.y, d.aggroRadiusM);
+      } else {
+        const t = this.players.get(m.targetId);
+        if (!t || t.combat.state === "dead" || Math.hypot(t.x - m.x, t.y - m.y) > d.leashRadiusM) {
+          m.targetId = null;
+        }
+      }
+    }
+    const target = m.targetId !== null ? this.players.get(m.targetId) : undefined;
+
+    switch (m.aiState) {
+      case "patrol": {
+        if (target) {
+          m.aiState = "chase";
+          break;
+        }
+        const distAnchor = Math.hypot(m.x - m.anchorX, m.y - m.anchorY);
+        if (distAnchor > d.leashRadiusM) {
+          this.moveMobToward(m, m.anchorX, m.anchorY, d.walkSpeedMps);
+          if (Math.hypot(m.x - m.anchorX, m.y - m.anchorY) < 2) c.hp = c.maxHp;
+        } else {
+          if (Math.hypot(m.x - m.patrolX, m.y - m.patrolY) < 0.5) this.pickPatrolPoint(m);
+          this.moveMobToward(m, m.patrolX, m.patrolY, d.walkSpeedMps);
+        }
+        break;
+      }
+      case "chase": {
+        if (!target) {
+          m.aiState = "patrol";
+          break;
+        }
+        if (Math.hypot(target.x - m.x, target.y - m.y) <= d.attackRangeM) {
+          m.aiState = "windup";
+          c.stateFrame = 0;
+          break;
+        }
+        this.moveMobToward(m, target.x, target.y, d.chaseSpeedMps);
+        break;
+      }
+      case "windup": {
+        if (!target) {
+          m.aiState = "patrol";
+          break;
+        }
+        m.yaw = Math.atan2(target.x - m.x, target.y - m.y);
+        if (Math.hypot(target.x - m.x, target.y - m.y) > d.attackRangeM * 2.5) {
+          m.aiState = "chase";
+          break;
+        }
+        if (c.stateFrame >= d.attack.windup) {
+          m.aiState = "attack";
+          c.stateFrame = 0;
+          m.hitDone = new Set();
+        }
+        break;
+      }
+      case "attack": {
+        if (c.stateFrame < d.attack.active) {
+          this.resolveHit(
+            m, "mobatk",
+            d.attack.shape.radius ?? 2, d.attack.shape.angle ?? 90,
+            d.attack.mult, d.attack.poise, false, undefined, false,
+          );
+        }
+        if (c.stateFrame >= d.attack.active + d.attack.recovery) {
+          m.aiState = "recover";
+          c.stateFrame = 0;
+        }
+        break;
+      }
+      case "recover": {
+        if (c.stateFrame >= 12) {
+          m.aiState = target ? "chase" : "patrol";
+          c.stateFrame = 0;
+        }
+        break;
+      }
+      case "stagger":
+      case "dead":
+        break;
+    }
+  }
+
   get tickMsAvg(): number {
     return this.tickCount === 0 ? 0 : this.tickMsSum / this.tickCount;
   }
@@ -733,7 +965,7 @@ export class ZoneWorld {
   }
 
   snapshot(): EntityState[] {
-    return [...this.players.values()].map((p) => ({
+    const players = [...this.players.values()].map((p) => ({
       id: p.id,
       kind: "player" as const,
       name: p.name,
@@ -745,5 +977,30 @@ export class ZoneWorld {
       staminaPct: Math.round((p.combat.stamina / p.combat.maxStamina) * 100),
       manaPct: Math.round((p.combat.mana / p.combat.maxMana) * 100),
     }));
+    const mobs = [...this.mobs.values()]
+      .filter((m) => m.combat.state !== "dead")
+      .map((m) => ({
+        id: m.id,
+        kind: "mob" as const,
+        name: m.name,
+        x: m.x,
+        y: m.y,
+        yaw: m.yaw,
+        animState: mobAnim(m),
+        hpPct: Math.round((m.combat.hp / m.combat.maxHp) * 100),
+      }));
+    return [...players, ...mobs];
   }
+}
+
+/** Mob animState: windup (9) is the telegraph the client renders as a red ring. */
+function mobAnim(m: MobEntity): number {
+  const c = m.combat;
+  if (c.state === "stagger") return AnimState.stagger;
+  if (c.state === "knockdown") return AnimState.knockdown;
+  if (c.state === "dead") return AnimState.dead;
+  if (m.aiState === "windup") return 9;
+  if (m.aiState === "attack") return AnimState.attack;
+  if (m.aiState === "chase" || m.aiState === "patrol") return AnimState.move;
+  return AnimState.idle;
 }
