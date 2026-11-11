@@ -1,4 +1,5 @@
 import { ZONE, classById, skillById } from "@azure-edge/gamedata";
+import type { CharacterGenome } from "@azure-edge/charforge";
 import {
   REMOTE_INTERP_BUFFER_MS,
   chainActiveRange,
@@ -20,6 +21,7 @@ import {
 } from "@azure-edge/shared";
 import { GameClient } from "./net.js";
 import { WorldView } from "./render.js";
+import { CharacterCreator, loadSavedGenome } from "./creator.js";
 
 /**
  * M0 client: third-person movement + client-side prediction + reconciliation.
@@ -36,7 +38,10 @@ const serverUrl =
   params.get("server") ??
   import.meta.env.VITE_GAME_SERVER_URL ??
   `${wsProtocol}://${window.location.hostname || "localhost"}:3001`;
-const playerName = params.get("name") ?? `Player-${crypto.randomUUID().slice(0, 4)}`;
+/** M2: the local player's CharForge genome (localStorage) + display name. */
+let currentGenome: CharacterGenome | null = null;
+let playerName = "";
+let classLabel = "Espadachim";
 
 const statusEl = document.getElementById("status") as HTMLElement;
 const playerEl = document.getElementById("player") as HTMLElement;
@@ -74,6 +79,8 @@ let lastDodgeSent = false;
 let lastSkillSent = false;
 
 window.addEventListener("keydown", (e) => {
+  // Typing in the creator (name field) must not trigger game actions.
+  if ((e.target as HTMLElement | null)?.tagName === "INPUT") return;
   if (e.code === "F3") {
     e.preventDefault();
     debugEl.classList.toggle("on");
@@ -585,22 +592,57 @@ function frame(now: number): void {
       `lost snapshots: ${client.lostSnapshots}  rejects: ${rejects}\n` +
       `players: ${lastSnapshot?.entities.filter((e) => e.kind === "player").length ?? 0}  mobs: ${mobs.length}  server tick: ${lastSnapshot?.serverTick ?? "-"}\n` +
       `pos: ${displayX.toFixed(1)}, ${displayY.toFixed(1)}  seq: ${seq}  corr: ${Math.hypot(corrX, corrY).toFixed(2)}\n` +
-      `classe: Espadachim  estado: ${localVisual.state}${localVisual.state === "attack" ? ` golpe ${localVisual.chain + 1}` : ""}  hp: ${me?.hpPct ?? "-"}%\n` +
+      `classe: ${classLabel}  estado: ${localVisual.state}${localVisual.state === "attack" ? ` golpe ${localVisual.chain + 1}` : ""}  hp: ${me?.hpPct ?? "-"}%\n` +
       `alvo: ${nearest ? `${nearest.m.name ?? "mob"} hp ${nearest.m.hpPct}% a ${nearest.d.toFixed(1)} m` : "-"}\n` +
       `controles: LMB ataque · Espaço esquiva · RMB guarda · Q ${SKILL_NAME} · WASD mover`;
   }
 }
 
-async function main(): Promise<void> {
+const creatorEl = document.getElementById("creator") as HTMLElement;
+const creatorPreviewEl = document.getElementById("creator-preview") as HTMLElement;
+const creator = new CharacterCreator(creatorEl, creatorPreviewEl);
+
+/** Start the game world with a CharForge genome (replaces the capsule). */
+async function startGame(genome: CharacterGenome, name: string): Promise<void> {
+  currentGenome = genome;
+  playerName = name;
+  classLabel = classById(genome.classId)?.name ?? "Espadachim";
   await view.init();
+  view.setLocalGenome(genome);
   playerEl.textContent = `backend: ${view.backend} · servidor ${serverUrl}`;
   client.connect(playerName);
   view.renderer.setAnimationLoop((time: number) => frame(time));
-  // Fallback if setAnimationLoop is a no-op in some backend: rAF keeps running
-  // via the renderer's own loop; frame() is driven by setAnimationLoop.
 }
 
-main().catch((err: unknown) => {
-  statusEl.textContent = `Falha ao iniciar o renderer: ${String(err)}`;
+/** Reopen the creator over the running game (HUD "Personagem" button). */
+document.getElementById("btn-personagem")?.addEventListener("click", () => {
+  void (async () => {
+    if (!currentGenome) return;
+    const result = await creator.show(currentGenome, playerName);
+    currentGenome = result.genome;
+    playerName = result.name || playerName;
+    classLabel = classById(result.genome.classId)?.name ?? "Espadachim";
+    view.setLocalGenome(result.genome);
+  })();
+});
+
+/**
+ * Boot: no saved genome (or `?creator=1`) → the creator runs first
+ * (class first, then customization); otherwise straight into the zone.
+ */
+async function boot(): Promise<void> {
+  let genome = loadSavedGenome();
+  let name = params.get("name") ?? "";
+  if (!genome || params.has("creator")) {
+    const result = await creator.show(genome, name);
+    genome = result.genome;
+    name = result.name;
+  }
+  if (!name) name = `Player-${crypto.randomUUID().slice(0, 4)}`;
+  await startGame(genome, name);
+}
+
+boot().catch((err: unknown) => {
+  statusEl.textContent = `Falha ao iniciar: ${String(err)}`;
   console.error(err);
 });

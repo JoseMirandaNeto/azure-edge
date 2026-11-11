@@ -17,6 +17,9 @@ importers:
 
   apps/client:
     dependencies:
+      '@azure-edge/charforge':
+        specifier: workspace:*
+        version: link:../../packages/charforge
       '@azure-edge/engine-adapter':
         specifier: workspace:*
         version: link:../../packages/engine-adapter

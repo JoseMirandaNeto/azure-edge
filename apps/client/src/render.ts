@@ -1,5 +1,7 @@
 import * as THREE from "three";
 import { MOBS, ZONE } from "@azure-edge/gamedata";
+import { buildCharacter, disposeCharacter, type CharacterBuild } from "@azure-edge/engine-adapter";
+import type { CharacterGenome } from "@azure-edge/charforge";
 import { sfc32, type EntityState } from "@azure-edge/shared";
 
 export type Backend = "webgpu" | "webgl2";
@@ -107,6 +109,9 @@ export class WorldView {
   readonly camera: THREE.PerspectiveCamera;
   private readonly players = new Map<number, { group: THREE.Group; guardDisc: THREE.Mesh }>();
   private readonly mobs = new Map<number, { group: THREE.Group; ring: THREE.Mesh }>();
+  /** M2: the local player's CharForge character (LOD0). Null = capsule fallback. */
+  private localCharacter: CharacterBuild | null = null;
+  private localId: number | null = null;
   /** Swing arc effects: one translucent sector per attacker, fading out. */
   private readonly swings = new Map<number, { mesh: THREE.Mesh; mat: THREE.MeshBasicMaterial; until: number }>();
   private readonly camPos = new THREE.Vector3();
@@ -235,6 +240,28 @@ export class WorldView {
   }
 
   /**
+   * Set (or clear) the local player's CharForge genome. The character mesh
+   * replaces the capsule placeholder for the local player only — remote
+   * players stay capsules until M4 syncs genomes. Null = capsule fallback.
+   */
+  setLocalGenome(genome: CharacterGenome | null): void {
+    if (this.localCharacter) {
+      this.scene.remove(this.localCharacter.group);
+      disposeCharacter(this.localCharacter);
+      this.localCharacter = null;
+    }
+    if (genome) this.localCharacter = buildCharacter(genome, 0);
+    // Force the local player mesh to be rebuilt on the next updatePlayer.
+    if (this.localId !== null) {
+      const entry = this.players.get(this.localId);
+      if (entry) {
+        this.scene.remove(entry.group);
+        this.players.delete(this.localId);
+      }
+    }
+  }
+
+  /**
    * Positions come pre-smoothed from main.ts: the local player from
    * prediction + reconciliation glide, remotes from the ~100 ms snapshot
    * interpolation buffer. This method just places the mesh (plus walk bob) —
@@ -244,7 +271,10 @@ export class WorldView {
     let entry = this.players.get(e.id);
     if (!entry) {
       const color = isLocal ? 0x2f7de1 : 0xe15a2f;
-      const group = makePlaceholder(color);
+      // Local player with a CharForge genome renders the character (4 draw
+      // calls); everyone else (and no-genome fallback) keeps the capsule.
+      const group = isLocal && this.localCharacter ? this.localCharacter.group : makePlaceholder(color);
+      if (isLocal) this.localId = e.id;
       this.scene.add(group);
       const [x, , z] = WORLD_TO_THREE(e.x, e.y);
       group.position.set(x, terrainHeight(x, z), z);
@@ -262,6 +292,8 @@ export class WorldView {
     entry.group.position.set(tx, ty, tz);
     // Mesh forward is -Z; world yaw maps to rotation.y = -yaw.
     entry.group.rotation.y = -e.yaw;
+    // Slight forward lean while moving (whole-body animation; M2 has no rig).
+    entry.group.rotation.x = e.animState === 1 ? 0.05 : 0;
     // Simple walk bob so movement reads on screen.
     const bob = e.animState === 1 ? Math.sin(performance.now() / 90) * 0.05 : 0;
     entry.group.position.y = ty + bob;

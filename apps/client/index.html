@@ -20,6 +20,37 @@
       #st-fill { background: #46c46a; width: 100%; }
       #mp-fill { background: #4a90e2; width: 100%; }
       #dmg-layer { position: fixed; inset: 0; pointer-events: none; overflow: hidden; }
+      .hud-btn { background: rgba(20,40,60,0.8); color: #eaf6ff; border: 1px solid #2a4a63; border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer; margin-top: 6px; }
+      .hud-btn:hover { border-color: #7cc4ff; }
+      /* Creator (M2): class first, then customization. */
+      #creator { position: fixed; inset: 0; z-index: 50; display: flex; background: rgba(4,12,20,0.97); color: #eaf6ff; }
+      #creator.hidden { display: none; }
+      .creator-preview { flex: 1; position: relative; min-width: 0; }
+      .creator-preview canvas { width: 100% !important; height: 100% !important; }
+      .creator-preview .hint { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); color: #9db8cc; font-size: 12px; }
+      .creator-panel { width: 400px; max-width: 92vw; overflow-y: auto; padding: 16px 18px 32px; background: rgba(8,24,36,0.92); border-left: 1px solid #1d3a52; }
+      .creator-panel h2 { margin: 6px 0 4px; font-size: 20px; }
+      .creator-panel h3 { margin: 16px 0 6px; font-size: 14px; color: #7cc4ff; }
+      .creator-panel .muted { color: #9db8cc; font-size: 12px; line-height: 1.5; }
+      .class-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+      .class-card { border: 1px solid #2a4a63; border-radius: 8px; padding: 10px; cursor: pointer; background: rgba(20,40,60,0.6); color: #eaf6ff; text-align: left; font-size: 12px; line-height: 1.5; }
+      .class-card:hover { border-color: #7cc4ff; }
+      .class-card b { font-size: 14px; }
+      .class-card .soon { font-size: 11px; color: #ffb020; }
+      .creator-panel input[type=text] { width: 100%; box-sizing: border-box; padding: 8px; border-radius: 6px; border: 1px solid #2a4a63; background: rgba(20,40,60,0.6); color: #eaf6ff; font-size: 14px; }
+      .slider-row { display: flex; align-items: center; gap: 8px; font-size: 12px; margin-top: 4px; }
+      .slider-row span { width: 150px; flex: none; color: #cfe3f2; }
+      .slider-row input { flex: 1; }
+      .swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.25); cursor: pointer; margin: 2px; padding: 0; }
+      .opt { border: 1px solid #2a4a63; border-radius: 6px; padding: 6px 8px; margin: 2px; cursor: pointer; background: rgba(20,40,60,0.6); color: #eaf6ff; font-size: 12px; }
+      .opt:hover { border-color: #7cc4ff; }
+      .opt.sel { border-color: #7cc4ff; background: rgba(40,80,120,0.7); }
+      .btn { border: 1px solid #2a4a63; border-radius: 6px; padding: 8px 12px; margin: 2px; cursor: pointer; background: rgba(20,40,60,0.8); color: #eaf6ff; font-size: 13px; }
+      .btn:hover { border-color: #7cc4ff; }
+      .btn.primary { background: #1d5c8a; border-color: #7cc4ff; font-weight: 700; }
+      .creator-actions { margin-top: 18px; display: flex; flex-wrap: wrap; gap: 4px; }
+      .creator-actions .primary { flex: 1; }
+      .gender-row { display: flex; gap: 6px; margin-top: 6px; }
       .dmg { position: absolute; left: 0; top: 0; font-weight: 800; font-size: 18px; color: #fff; text-shadow: 0 1px 2px #000, 0 0 6px rgba(0,0,0,0.6); display: none; white-space: nowrap; }
       .dmg-crit { color: #ffb020; font-size: 24px; }
       .dmg-finisher { color: #ff5a3c; font-size: 24px; }
@@ -40,6 +71,45 @@
         <div class="bar"><div id="hp-fill"></div></div>
         <div class="bar"><div id="st-fill"></div></div>
         <div class="bar"><div id="mp-fill"></div></div>
+      </div>
+      <button id="btn-personagem" class="hud-btn" type="button">Personagem</button>
+    </div>
+    <div id="creator" class="hidden">
+      <div class="creator-preview" id="creator-preview"><span class="hint">Arraste para girar o personagem</span></div>
+      <div class="creator-panel">
+        <div id="creator-step-class">
+          <h2>Escolha sua classe</h2>
+          <p class="muted">Primeiro a classe — ela define o corpo e a roupa iniciais do personagem. Depois você customiza tudo.</p>
+          <div class="class-grid" id="class-grid"></div>
+          <p class="muted" id="class-note"></p>
+        </div>
+        <div id="creator-step-custom" class="hidden">
+          <h2 id="creator-title">Customize seu personagem</h2>
+          <button id="creator-back" class="btn" type="button">← Trocar classe</button>
+          <h3>Nome</h3>
+          <input id="creator-name" type="text" maxlength="24" placeholder="Nome do personagem" />
+          <p class="muted">O nome define a aparência inicial (mesmo nome, mesma base).</p>
+          <h3>Gênero</h3>
+          <div class="gender-row">
+            <button id="creator-gender-f" class="opt" type="button">Feminino</button>
+            <button id="creator-gender-m" class="opt" type="button">Masculino</button>
+          </div>
+          <div id="creator-sliders"></div>
+          <h3>Cabelo</h3>
+          <div id="creator-hair"></div>
+          <div id="creator-haircolor"></div>
+          <h3>Roupa</h3>
+          <div id="creator-outfit"></div>
+          <h3>Pele</h3>
+          <div id="creator-skin"></div>
+          <h3>Olhos</h3>
+          <div id="creator-iris"></div>
+          <div class="creator-actions">
+            <button id="creator-random" class="btn" type="button">Sortear tudo</button>
+            <button id="creator-export" class="btn" type="button">Exportar GLB</button>
+            <button id="creator-enter" class="btn primary" type="button">Salvar e entrar no jogo</button>
+          </div>
+        </div>
       </div>
     </div>
     <div id="debug"></div>
