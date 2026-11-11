@@ -61,10 +61,13 @@ describe("combat (pure rules)", () => {
     const rolls = Array.from({ length: 1000 }, () => rollCrit(rng, BASE_CRIT_CHANCE));
     expect(rolls.filter(Boolean).length).toBeGreaterThan(20);
     expect(rolls.filter(Boolean).length).toBeLessThan(90);
-    const rng2 = sfc32(42);
-    expect(Array.from({ length: 10 }, () => rollVariance(rng2))).toEqual(
-      Array.from({ length: 10 }, () => rollVariance(sfc32(42))),
-    );
+    const draw10 = (seed: number): number[] => {
+      const rng = sfc32(seed);
+      return Array.from({ length: 10 }, () => rollVariance(rng));
+    };
+    const seqA = draw10(42);
+    expect(seqA).toEqual(draw10(42)); // same seed => same sequence
+    expect(new Set(seqA).size).toBeGreaterThan(1); // and it actually varies
     const v = rollVariance(sfc32(1));
     expect(v).toBeGreaterThanOrEqual(0.95);
     expect(v).toBeLessThanOrEqual(1.05);
