@@ -40,8 +40,11 @@
   código M0 dava 53 teleportes e 149 frames com salto > 0,3 m; o novo dá
   0 teleportes e 0 frames com salto > 0,3 m (salto máx. 0,109 m/frame = passo
   normal a 6 m/s). Com 500 ms: M0 53 teleportes / 143 frames; novo 0 / 0.
-- NÃO medido no navegador real: o quicar com `?latency=100` ainda precisa da
-  confirmação visual do Jose no Brave (sem browser headless utilizável aqui).
+- Confirmado visualmente pelo Jose no Brave em 2026-11-11 (`?latency=100`, ping
+  451 ms): o jogador anda normal, sem quicar; `corr: 0.03`, draw calls 26,
+  51 fps, 0 lost/rejects, players 2, tick 51014. O "pulinho leve" ao andar é o
+  walk bob intencional de ±0,05 m do renderer (para o movimento ler na tela),
+  não lag.
 
 ## Dívida técnica p/ M1 (registrado 2026-11-11, validado pelo Jose no túnel)
 
@@ -50,7 +53,8 @@
   0,5 m, a câmera segue a prevista sem suavização e o remoto persegue o snapshot
   sem buffer. Correção p/ M1: deslizar a reconciliação (~100–150 ms, teleportar só
   se erro >2 m), amortecer a câmera, interpolar o remoto com buffer de ~100 ms.
-  → **Feito em 0.2.0** (ver acima); falta a confirmação visual no Brave.
+  → **Feito em 0.2.0** (ver acima); confirmado visualmente pelo Jose no Brave
+  em 2026-11-11: anda normal com `?latency=100` (ping 451 ms, corr 0,03).
 - Draw calls acima do orçamento: 1742–4374 por frame (orçamento ≤600/cena) com só
   ~9700 tris — investigar o que o WebGPU está contando / instancing e merge de meshes.
   → **Causa encontrada em 0.2.0**: era erro de medição do painel (contador
