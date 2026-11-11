@@ -73,9 +73,19 @@ importers:
       '@azure-edge/charforge':
         specifier: workspace:*
         version: link:../../packages/charforge
+      '@azure-edge/engine-adapter':
+        specifier: workspace:*
+        version: link:../../packages/engine-adapter
       '@azure-edge/gamedata':
         specifier: workspace:*
         version: link:../../packages/gamedata
+      three:
+        specifier: ^0.182.0
+        version: 0.182.0
+    devDependencies:
+      '@types/three':
+        specifier: ^0.182.0
+        version: 0.182.0
 
   packages/charforge:
     dependencies:

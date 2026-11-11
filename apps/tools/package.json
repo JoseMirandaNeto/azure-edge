@@ -1,1 +1,19 @@
-{"dependencies":{"@azure-edge/charforge":"workspace:*","@azure-edge/gamedata":"workspace:*"},"name":"@azure-edge/tools","private":true,"scripts":{"build":"tsc -p tsconfig.json","typecheck":"tsc -p tsconfig.json --noEmit"},"type":"module","version":"0.1.0"}
+{
+  "dependencies": {
+    "@azure-edge/charforge": "workspace:*",
+    "@azure-edge/engine-adapter": "workspace:*",
+    "@azure-edge/gamedata": "workspace:*",
+    "three": "^0.182.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.182.0"
+  },
+  "name": "@azure-edge/tools",
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "type": "module",
+  "version": "0.1.0"
+}
