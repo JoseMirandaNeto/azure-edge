@@ -1,0 +1,4 @@
+
+> @azure-edge/gamedata@0.1.0 typecheck /home/hatch/workspace/azure-edge/packages/gamedata
+> tsc -p tsconfig.json --noEmit
+

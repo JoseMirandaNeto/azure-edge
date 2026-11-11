@@ -1,0 +1,4 @@
+
+> @azure-edge/charforge@0.1.0 build /home/hatch/workspace/azure-edge/packages/charforge
+> tsc -p tsconfig.json
+

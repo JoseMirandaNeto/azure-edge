@@ -1,0 +1,4 @@
+
+> @azure-edge/shared@0.1.0 build /home/hatch/workspace/azure-edge/packages/shared
+> tsc -p tsconfig.json
+

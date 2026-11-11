@@ -1,0 +1,14 @@
+
+> @azure-edge/charforge@0.1.0 test /home/hatch/workspace/azure-edge/packages/charforge
+> vitest run
+
+
+ RUN  v3.2.7 /home/hatch/workspace/azure-edge/packages/charforge
+
+ ✓ src/index.test.ts (3 tests) 14ms
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+   Start at  12:48:26
+   Duration  1.98s (transform 403ms, setup 0ms, collect 409ms, tests 14ms, environment 0ms, prepare 413ms)
+

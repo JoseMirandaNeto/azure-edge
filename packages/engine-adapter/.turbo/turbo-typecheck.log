@@ -1,0 +1,4 @@
+
+> @azure-edge/engine-adapter@0.1.0 typecheck /home/hatch/workspace/azure-edge/packages/engine-adapter
+> tsc -p tsconfig.json --noEmit
+
