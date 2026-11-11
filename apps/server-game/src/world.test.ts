@@ -75,8 +75,9 @@ describe("ZoneWorld (authoritative)", () => {
       const p = w.addPlayer(`bot${i}`);
       w.applyInput(p.id, forwardInput(1));
     }
-    // 200 ticks: p99 tolerates the one-off JIT/GC warm-up spike of the
-    // first ticks; the budget in AGENTS.md §6 is p99, not max.
+    // Warm up (JIT/GC) before measuring: the budget in AGENTS.md §6 is p99.
+    for (let i = 0; i < 20; i += 1) w.step();
+    w.resetTickStats();
     for (let i = 0; i < 200; i += 1) w.step();
     expect(w.tickMsP99()).toBeLessThan(10);
   });
@@ -313,6 +314,8 @@ describe("ZoneWorld (authoritative)", () => {
     w.addPlayer("B");
     w.spawnMobs("escorpiao", 30);
     let seq = 1;
+    for (let i = 0; i < 20; i += 1) w.step(); // warm-up
+    w.resetTickStats();
     for (let i = 0; i < 200; i += 1) {
       if (a.combat.state === "idle" || a.combat.state === "move") {
         w.applyInput(a.id, input(seq, 1));

@@ -964,6 +964,15 @@ export class ZoneWorld {
     return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * 0.99))] ?? 0;
   }
 
+  /** Clear tick stats (lets benches warm up JIT/GC before measuring). */
+  resetTickStats(): void {
+    this.tickMsLast = 0;
+    this.tickMsMax = 0;
+    this.tickMsSum = 0;
+    this.tickCount = 0;
+    this.tickMsSamples = [];
+  }
+
   snapshot(): EntityState[] {
     const players = [...this.players.values()].map((p) => ({
       id: p.id,
