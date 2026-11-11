@@ -1,0 +1,4 @@
+
+> @azure-edge/server-api@0.1.0 typecheck /home/hatch/workspace/azure-edge/apps/server-api
+> tsc -p tsconfig.json --noEmit
+

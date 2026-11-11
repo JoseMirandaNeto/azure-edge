@@ -1,0 +1,4 @@
+
+> @azure-edge/tools@0.1.0 typecheck /home/hatch/workspace/azure-edge/apps/tools
+> tsc -p tsconfig.json --noEmit
+

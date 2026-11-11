@@ -1,0 +1,14 @@
+
+> @azure-edge/server-game@0.1.0 test /home/hatch/workspace/azure-edge/apps/server-game
+> vitest run
+
+
+ RUN  v3.2.7 /home/hatch/workspace/azure-edge/apps/server-game
+
+ ✓ src/world.test.ts (6 tests) 12ms
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  12:48:26
+   Duration  2.19s (transform 439ms, setup 0ms, collect 586ms, tests 12ms, environment 0ms, prepare 514ms)
+

@@ -1,0 +1,4 @@
+
+> @azure-edge/server-game@0.1.0 build /home/hatch/workspace/azure-edge/apps/server-game
+> tsc -p tsconfig.json
+

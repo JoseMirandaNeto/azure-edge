@@ -1,0 +1,1 @@
+{"dependencies":{"@azure-edge/shared":"workspace:*"},"name":"@azure-edge/server-api","private":true,"scripts":{"build":"tsc -p tsconfig.json","typecheck":"tsc -p tsconfig.json --noEmit"},"type":"module","version":"0.1.0"}
