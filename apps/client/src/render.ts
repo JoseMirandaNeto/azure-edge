@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { MOBS, ZONE } from "@azure-edge/gamedata";
 import { buildCharacter, disposeCharacter, type CharacterBuild } from "@azure-edge/engine-adapter";
 import type { CharacterGenome } from "@azure-edge/charforge";
@@ -259,6 +260,52 @@ export class WorldView {
         this.players.delete(this.localId);
       }
     }
+  }
+
+  /**
+   * GLB character (M2.5 test): loads a rigged glTF character and uses it as
+   * the local player's mesh instead of the CharForge build. The GLB faces
+   * +Z (glTF convention) and is 1.0 m tall, so the inner scene is rotated
+   * PI (forward becomes -Z, like CharForge) and scaled to ~1.75 m. Returns
+   * false if the file fails to load — the caller falls back to the genome.
+   * The rig has no animations yet, so the character stands in rest pose;
+   * movement still reads via the whole-body bob/lean in updatePlayer.
+   */
+  async useGlbCharacter(url: string): Promise<boolean> {
+    let gltf: Awaited<ReturnType<GLTFLoader["loadAsync"]>>;
+    try {
+      gltf = await new GLTFLoader().loadAsync(url);
+    } catch (err) {
+      console.warn("GLB character failed to load, falling back to genome:", err);
+      return false;
+    }
+    if (this.localCharacter) {
+      this.scene.remove(this.localCharacter.group);
+      disposeCharacter(this.localCharacter);
+      this.localCharacter = null;
+    }
+    const wrapper = new THREE.Group();
+    const inner = gltf.scene;
+    inner.rotation.y = Math.PI;
+    wrapper.add(inner);
+    wrapper.scale.setScalar(1.75);
+    let triangles = 0;
+    wrapper.traverse((o) => {
+      if (o instanceof THREE.Mesh) {
+        const geo = o.geometry as THREE.BufferGeometry;
+        const posCount = geo.attributes.position?.count ?? 0;
+        triangles += (geo.index ? geo.index.count : posCount) / 3;
+      }
+    });
+    this.localCharacter = { group: wrapper, drawCalls: 1, triangles: Math.round(triangles), heightM: 1.75 };
+    if (this.localId !== null) {
+      const entry = this.players.get(this.localId);
+      if (entry) {
+        this.scene.remove(entry.group);
+        this.players.delete(this.localId);
+      }
+    }
+    return true;
   }
 
   /**

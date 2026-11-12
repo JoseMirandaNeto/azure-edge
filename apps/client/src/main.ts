@@ -1,5 +1,5 @@
 import { ZONE, classById, skillById } from "@azure-edge/gamedata";
-import type { CharacterGenome } from "@azure-edge/charforge";
+import { generateGenome, type CharacterGenome } from "@azure-edge/charforge";
 import {
   REMOTE_INTERP_BUFFER_MS,
   chainActiveRange,
@@ -30,6 +30,10 @@ import { CharacterCreator, loadSavedGenome } from "./creator.js";
 
 const params = new URLSearchParams(window.location.search);
 const simulatedLatencyMs = Number(params.get("latency") ?? 0) || 0;
+/** M2.5 test: `?char=warrior` renders the rigged GLB character instead of
+ * the CharForge procedural build (skips the creator, Espadachim by default). */
+const useGlbCharacter = params.get("char") === "warrior";
+const GLB_CHARACTER_URL = "/assets/characters/warrior_f_r64_final.glb";
 // Deploy-ready: on an https:// page the browser blocks plain ws://
 // (mixed content), so default to wss:// there. `?server=` still wins,
 // then the build-time VITE_GAME_SERVER_URL (e.g. wss://…onrender.com).
@@ -618,7 +622,12 @@ async function startGame(genome: CharacterGenome, name: string): Promise<void> {
   playerName = name;
   classLabel = classById(genome.classId)?.name ?? "Espadachim";
   await view.init();
-  view.setLocalGenome(genome);
+  if (useGlbCharacter) {
+    const ok = await view.useGlbCharacter(GLB_CHARACTER_URL);
+    if (!ok) view.setLocalGenome(genome);
+  } else {
+    view.setLocalGenome(genome);
+  }
   playerEl.textContent = `backend: ${view.backend} · servidor ${serverUrl}`;
   client.connect(playerName);
   view.renderer.setAnimationLoop((time: number) => frame(time));
@@ -639,11 +648,15 @@ document.getElementById("btn-personagem")?.addEventListener("click", () => {
 /**
  * Boot: no saved genome (or `?creator=1`) → the creator runs first
  * (class first, then customization); otherwise straight into the zone.
+ * `?char=warrior` skips the creator (default Espadachim genome) and loads
+ * the rigged GLB character instead of the CharForge build.
  */
 async function boot(): Promise<void> {
   let genome = loadSavedGenome();
   let name = params.get("name") ?? "";
-  if (!genome || params.has("creator")) {
+  if (useGlbCharacter && !genome) {
+    genome = generateGenome(20261112);
+  } else if (!genome || params.has("creator")) {
     hideLoading(); // O criador cobre a tela; o splash não pode ficar por cima.
     const result = await creator.show(genome, name);
     genome = result.genome;
