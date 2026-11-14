@@ -1,0 +1,8 @@
+
+> @azure-edge/server-game@0.1.0 dev /home/hatch/workspace/azure-edge/apps/server-game
+> tsx watch src/index.ts
+
+sh: 1: tsx: not found
+/home/hatch/workspace/azure-edge/apps/server-game:
+ ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @azure-edge/server-game@0.1.0 dev: `tsx watch src/index.ts`
+spawn ENOENT

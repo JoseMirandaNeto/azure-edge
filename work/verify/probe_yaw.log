@@ -1,0 +1,9 @@
+spawn pos: -5.8, 13.8  seq: 2  corr: 0.00  yaw: 0.00  moving: false
+mid-S pos: -5.8, 13.8  seq: 2  corr: 0.00  yaw: 0.00  moving: false
+late-S pos: -5.8, 13.8  seq: 2  corr: 0.00  yaw: 0.00  moving: false
+idle-after-S undefined
+mid-W undefined
+late-W pos: 0.0, 0.0  seq: 0  corr: 0.00  yaw: 0.00  moving: false
+attack+120ms classe: Espadachim  estado: idle  hp: 100%
+attack shot estado classe: Espadachim  estado: attack golpe 1  hp: 100%
+done

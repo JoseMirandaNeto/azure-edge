@@ -1,0 +1,20 @@
+spawned: true glb200: true
+settle: pos: 8.2, -22.0  seq: 2  corr: 0.00  yaw: 0.00  moving: false | rig: rig: bones=33 staticRoot=false handR=true handL=true phase=0.00 names=DEF-foot.L,DEF-foot.R,DEF-forearm.L,DEF-forearm.L.001,DEF-forearm.R,DEF-forearm.R.001,DEF-hand.L,DEF-hand.R,DEF-pelvis.L,DEF-pelvis.R,DEF-shin.L,DEF-shin.L.001,DEF-shin.R,DEF-shin.R.001,DEF-shoulder.L,DEF-shoulder.R,DEF-spine,DEF-spine.001,DEF-spine.002,DEF-spine.003,DEF-spine.004,DEF-spine.005,DEF-spine.006,DEF-thigh.L,DEF-thigh.L.001,DEF-thigh.R,DEF-thigh.R.001,DEF-toe.L,DEF-toe.R,DEF-upper_arm.L,DEF-upper_arm.L.001,DEF-upper_arm.R,DEF-upper_arm.R.001
+shot 133_male_rigged_city_idle_front | pos: 8.2, -21.4  seq: 22  corr: 0.00  yaw: 0.00  moving: false | rig: rig: bones=33 staticRoot=false handR=true handL=true phase=0.00 names=DEF-foot.L,DEF-foot.R,DEF-forearm.L,DEF-forearm.L.001,DEF-forearm.R,DEF-forearm.R.001,DEF-hand.L,DEF-hand.R,DEF-pelvis.L,DEF-pelvis.R,DEF-shin.L,DEF-shin.L.001,DEF-shin.R,DEF-shin.R.001,DEF-shoulder.L,DEF-shoulder.R,DEF-spine,DEF-spine.001,DEF-spine.002,DEF-spine.003,DEF-spine.004,DEF-spine.005,DEF-spine.006,DEF-thigh.L,DEF-thigh.L.001,DEF-thigh.R,DEF-thigh.R.001,DEF-toe.L,DEF-toe.R,DEF-upper_arm.L,DEF-upper_arm.L.001,DEF-upper_arm.R,DEF-upper_arm.R.001 | classe: Espadachim  estado: idle  hp: 100%
+shot 134_male_rigged_city_idle_back | pos: 8.2, -21.4  seq: 34  corr: 0.00  yaw: 0.00  moving: false | rig: rig: bones=33 staticRoot=false handR=true handL=true phase=0.00 names=DEF-foot.L,DEF-foot.R,DEF-forearm.L,DEF-forearm.L.001,DEF-forearm.R,DEF-forearm.R.001,DEF-hand.L,DEF-hand.R,DEF-pelvis.L,DEF-pelvis.R,DEF-shin.L,DEF-shin.L.001,DEF-shin.R,DEF-shin.R.001,DEF-shoulder.L,DEF-shoulder.R,DEF-spine,DEF-spine.001,DEF-spine.002,DEF-spine.003,DEF-spine.004,DEF-spine.005,DEF-spine.006,DEF-thigh.L,DEF-thigh.L.001,DEF-thigh.R,DEF-thigh.R.001,DEF-toe.L,DEF-toe.R,DEF-upper_arm.L,DEF-upper_arm.L.001,DEF-upper_arm.R,DEF-upper_arm.R.001 | classe: Espadachim  estado: idle  hp: 100%
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+page.screenshot: Timeout 120000ms exceeded.
+Call log:
+  - taking page screenshot
+  - waiting for fonts to load...
+  - fonts loaded
+
+    at shot (/home/hatch/workspace/azure-edge/work/verify/verify_male_city2.mjs:40:14)
+    at /home/hatch/workspace/azure-edge/work/verify/verify_male_city2.mjs:59:7 {
+  name: 'TimeoutError'
+}
+
+Node.js v24.22.1

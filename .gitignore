@@ -5,3 +5,7 @@ dist
 *.local
 .turbo/
 *.tsbuildinfo
+
+# Large local tooling/raw assets (never commit)
+work/verify/chrome/
+work/scenery/raw/

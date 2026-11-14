@@ -1,0 +1,4 @@
+facing: pos: 21.6, 15.3  seq: 26  corr: 0.00  yaw: 3.14  moving: true | classe: Espadachim  estado: idle  hp: 100%
+shot 145 | pos: 21.6, 8.7  seq: 38  corr: 0.06  yaw: 3.14  moving: false | classe: Espadachim  estado: attack golpe 4  hp: 100%
+console errors: []
+done

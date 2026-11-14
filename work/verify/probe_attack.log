@@ -1,0 +1,7 @@
+before click: classe: Espadachim  estado: attack golpe 1  hp: 100%
++100ms: classe: Espadachim  estado: attack golpe 1  hp: 100%
++300ms: classe: Espadachim  estado: attack golpe 1  hp: 100%
++600ms: classe: Espadachim  estado: attack golpe 1  hp: 100%
++900ms: classe: Espadachim  estado: attack golpe 1  hp: 100%
++1300ms: classe: Espadachim  estado: attack golpe 1  hp: 100%
+done

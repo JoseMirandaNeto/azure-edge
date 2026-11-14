@@ -1,0 +1,9 @@
+spawn pos: 14.2, 7.4  seq: 2  corr: 0.00  yaw: 0.00  moving: false | rig: rig: bones=33 staticRoot=false handR=false handL=false phase=0.00
+walk-S pos: 14.2, 7.4  seq: 2  corr: 0.00  yaw: 0.00  moving: false | rig: rig: bones=33 staticRoot=false handR=false handL=false phase=0.00
+walk-S pos: 14.2, 7.4  seq: 2  corr: 0.00  yaw: 0.00  moving: false | rig: rig: bones=33 staticRoot=false handR=false handL=false phase=0.00
+walk-S pos: 14.2, 7.4  seq: 2  corr: 0.00  yaw: 0.00  moving: false | rig: rig: bones=33 staticRoot=false handR=false handL=false phase=0.00
+walk-S pos: 14.2, 7.4  seq: 2  corr: 0.00  yaw: 0.00  moving: false | rig: rig: bones=33 staticRoot=false handR=false handL=false phase=0.00
+idle pos: 14.2, 7.4  seq: 2  corr: 0.00  yaw: 0.00  moving: false | rig: rig: bones=33 staticRoot=false handR=false handL=false phase=0.00
+attack pos: 14.2, 7.4  seq: 2  corr: 0.00  yaw: 0.00  moving: false | rig: rig: bones=33 staticRoot=false handR=false handL=false phase=0.00
+attack+400 rig: rig: bones=33 staticRoot=false handR=false handL=false phase=0.00
+done

@@ -12,6 +12,43 @@ import {
   type Camera25DMode,
   type EntityState,
 } from "@azure-edge/shared";
+import {
+  applyFresnelRim,
+  asianRoofGeo,
+  bandGeo,
+  bladeGeo,
+  cactusGeo,
+  capitalGeo,
+  chamferedBoxGeo,
+  domeGeo,
+  eggGeo,
+  fountainBasinGeo,
+  fountainColumnGeo,
+  fractalHeight,
+  gothicPillar,
+  humanoidTorsoGeo,
+  lanternBodyGeo,
+  lanternPostGeo,
+  latheProfile,
+  limbGeo,
+  npcRobeGeo,
+  organicCanopyGeo,
+  organicCloudGeo,
+  organicMaterial,
+  organicRockGeo,
+  organicTrunkGeo,
+  palmFrondGeo,
+  palmTrunkGeo,
+  pedimentGeo,
+  portalRingGeo,
+  rboxGeo,
+  ridgeBeamGeo,
+  rimShellOf,
+  sarcophagusGeo,
+  shieldGeo,
+  spikeGeo,
+  swordBladeGeo,
+} from "./procedural.js";
 
 export type Backend = "webgpu" | "webgl2";
 
@@ -35,11 +72,11 @@ function makeWeapon(classId: string): THREE.Group {
   const holy = new THREE.MeshStandardMaterial({ color: 0xffe98a, roughness: 0.3, metalness: 0.2, emissive: 0xaa8811 });
   const sword = (x: number): THREE.Group => {
     const s = new THREE.Group();
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.75, 0.015), steel);
+    const blade = new THREE.Mesh(swordBladeGeo(), steel);
     blade.position.y = 0.45;
-    const guard = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.04), gold);
+    const guard = new THREE.Mesh(chamferedBoxGeo(0.16, 0.03, 0.04, 0.008), gold);
     guard.position.y = 0.08;
-    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.16, 8), grip);
+    const handle = new THREE.Mesh(limbGeo(0.02, 0.02, 0.16, 8), grip);
     s.add(blade, guard, handle);
     s.position.set(x, 1.0, 0.1);
     s.rotation.x = 0.35;
@@ -50,27 +87,29 @@ function makeWeapon(classId: string): THREE.Group {
   } else if (classId === "guerreiro") {
     g.add(sword(0.45));
     const shield = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.32, 0.32, 0.04, 20),
+      shieldGeo(),
       new THREE.MeshStandardMaterial({ color: 0x5a6a7a, roughness: 0.5, metalness: 0.6 }),
     );
-    shield.rotation.x = Math.PI / 2;
+    // Domo da face externa para -Z (para frente, como o boss).
+    shield.rotation.x = -Math.PI / 2;
     shield.position.set(-0.5, 1.05, 0.05);
-    const boss = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), gold);
-    boss.position.set(-0.5, 1.05, -0.02);
+    const boss = new THREE.Mesh(domeGeo(0.08, 0.06), gold);
+    boss.rotation.x = -Math.PI / 2;
+    boss.position.set(-0.5, 1.05, 0.02);
     g.add(shield, boss);
   } else if (classId === "atirador") {
-    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.8, 10), steel);
+    const barrel = new THREE.Mesh(limbGeo(0.035, 0.035, 0.8, 10), steel);
     barrel.rotation.x = Math.PI / 2 - 0.15;
     barrel.position.set(0.15, 1.05, -0.25);
-    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.3), grip);
+    const stock = new THREE.Mesh(chamferedBoxGeo(0.08, 0.14, 0.3, 0.02), grip);
     stock.position.set(0.15, 0.95, 0.15);
     g.add(barrel, stock);
   } else {
     // curandeiro: staff + glowing orb (foco sagrado)
-    const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.028, 1.6, 8), grip);
+    const staff = new THREE.Mesh(limbGeo(0.028, 0.022, 1.6, 8), grip);
     staff.position.set(0.5, 1.1, 0.05);
     staff.rotation.z = 0.1;
-    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 10), holy);
+    const orb = new THREE.Mesh(eggGeo(0.09, 0.09, 0, 12, 10), holy);
     orb.position.set(0.56, 1.95, 0.05);
     g.add(staff, orb);
   }
@@ -90,11 +129,15 @@ function terrainHeightFor(zone: ZoneData, x: number, z: number): number {
       0.9 * Math.abs(Math.sin(x * 0.045 + 0.7) * Math.cos(z * 0.035)) +
       0.5 * Math.sin(x * 0.13 + z * 0.09) +
       0.2 * Math.sin(x * 0.31 - z * 0.27);
+    // Detalhe fractal (procedural.ts): 4 oitavas de value noise sobre a
+    // forma larga das dunas — o chão deixa de ser uma onda lisa.
+    h = fractalHeight(x, z, h, 20261114, 0.22, 0.12);
   } else if (zone.zone.id === "cidade_serket") {
     // City: nearly flat (plaza + streets stay walkable, buildings sit level);
     // only a gentle rise toward the wall.
     flat = Math.min(1, Math.max(0, (d - 20) / 18));
     h = 0.5 * Math.sin(x * 0.06) * Math.cos(z * 0.05) + 0.2 * Math.sin(x * 0.21 + z * 0.17);
+    h = fractalHeight(x, z, h, 20261115, 0.06, 0.15);
   } else {
     h =
       1.4 * Math.sin(x * 0.08) * Math.cos(z * 0.06) +
@@ -117,19 +160,19 @@ function makePlaceholder(
   const armor = opts.armor ?? null;
   const bodyColor = armor ? Number.parseInt(armor.colors.primary.slice(1), 16) : color;
   const mat = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.6, metalness: 0.1 });
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.9, 4, 12), mat);
-  body.position.y = 0.95;
+  const body = new THREE.Mesh(humanoidTorsoGeo(), mat);
+  body.position.y = 0.15;
   const head = new THREE.Mesh(
-    new THREE.SphereGeometry(0.28, 16, 12),
+    eggGeo(0.28, 0.3, 0, 16, 12),
     new THREE.MeshStandardMaterial({ color: 0xf2d6c2, roughness: 0.5 }),
   );
   head.position.y = 1.85;
   const nose = new THREE.Mesh(
-    new THREE.ConeGeometry(0.09, 0.3, 8),
+    spikeGeo(0.09, 0.3, 8),
     new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.4 }),
   );
   nose.rotation.x = -Math.PI / 2;
-  nose.position.set(0, 1.85, -0.32);
+  nose.position.set(0, 1.85, -0.17);
   const auraColor = armor ? Number.parseInt(armor.aura.slice(1), 16) : color;
   const ringMat = new THREE.MeshBasicMaterial({ color: auraColor, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.45, 0.55, 24), ringMat);
@@ -144,6 +187,19 @@ function makePlaceholder(
   return { group: g, bodyMat: mat, ringMat };
 }
 
+// ---------------------------------------------------------------------------
+// Zero Primitivas (Regra Anti-Blocos, permanente): nenhum mob usa primitiva
+// nua visível (Box/Cylinder/Cone/Sphere/Capsule/Torus). Corpos são
+// LatheGeometry de perfis anatômicos subdivididos; membros, mandíbulas e
+// chifres são extrusões chanfradas ou lathes afilados; o rim light vem de
+// um termo Fresnel injetado no material (WebGL2) + um shell invertido
+// (BackSide) que carrega o rim sob o WebGPURenderer. Os anéis planos no
+// chão (mobRing/eliteRing) são indicadores de gameplay, não partes do
+// modelo, e ficam. O kit orgânico dos mobs (eggGeo, limbGeo, bladeGeo,
+// applyFresnelRim, rimShellOf, ...) vive em ./procedural.ts (fonte única);
+// o helper local de torno agora é latheProfile, importado de lá.
+// ---------------------------------------------------------------------------
+
 /**
  * Detailed procedural scorpion (escorpião): segmented body, tail arched
  * over the back with a stinger, two pincers, 8 legs, glowing eyes.
@@ -156,23 +212,28 @@ function makeScorpion(color: number, scale: number): { group: THREE.Group; ring:
   const dark = new THREE.MeshStandardMaterial({ color: 0x2a1a0e, roughness: 0.7 });
   const plate = new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 0.5, metalness: 0.2 });
   const eyeMat = new THREE.MeshStandardMaterial({ color: 0xff3020, roughness: 0.3, emissive: 0xcc1100, emissiveIntensity: 1.8 });
+  applyFresnelRim(shell, 0xff5040, 0.5);
   const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
     g.add(m);
     return m;
   };
-  // Segmented body: cephalothorax + two abdomen segments (flattened spheres).
-  const ceph = add(new THREE.SphereGeometry(0.5, 14, 10), shell, 0, 0.42, -0.2);
-  ceph.scale.set(1.05, 0.62, 1.15);
-  const abd1 = add(new THREE.SphereGeometry(0.46, 14, 10), plate, 0, 0.42, 0.35);
-  abd1.scale.set(1, 0.6, 0.9);
-  const abd2 = add(new THREE.SphereGeometry(0.38, 12, 10), shell, 0, 0.44, 0.78);
-  abd2.scale.set(0.95, 0.6, 0.85);
-  // Eyes: two glowing red dots on the front of the cephalothorax.
-  add(new THREE.SphereGeometry(0.06, 8, 6), eyeMat, -0.13, 0.62, -0.62);
-  add(new THREE.SphereGeometry(0.06, 8, 6), eyeMat, 0.13, 0.62, -0.62);
-  // Tail: 4 segments rising almost vertically off the rear + stinger cone.
+  // Segmented body: cephalothorax + two abdomen segments (lathe ellipsoids
+  // with anatomical profiles, not flattened spheres).
+  const ceph = add(eggGeo(0.5, 0.31), shell, 0, 0.42, -0.2);
+  ceph.scale.set(1.05, 1, 1.15);
+  rimShellOf(ceph, 0xff5040, 0.28);
+  const abd1 = add(eggGeo(0.46, 0.28), plate, 0, 0.42, 0.35);
+  abd1.scale.set(1, 1, 0.9);
+  const abd2 = add(eggGeo(0.38, 0.23), shell, 0, 0.44, 0.78);
+  abd2.scale.set(0.95, 1, 0.85);
+  // Eyes: two glowing red domes on the front of the cephalothorax.
+  for (const side of [-1, 1]) {
+    const eye = add(domeGeo(0.06, 0.05, 8), eyeMat, side * 0.13, 0.62, -0.62);
+    eye.rotation.x = -Math.PI / 2;
+  }
+  // Tail: 4 segments rising almost vertically off the rear + stinger spike.
   // Near-vertical on purpose (top ~1.9 m): the old forward-leaning arch
   // foreshortened into the body from the fixed south camera and the tail
   // vanished. A tall rear arch reads as a scorpion from any angle.
@@ -184,32 +245,40 @@ function makeScorpion(color: number, scale: number): { group: THREE.Group; ring:
     [0, 1.66, 0.82, 0.13],
   ];
   for (const [x, y, z, r] of tailSegs) {
-    const s = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), shell);
+    const s = new THREE.Mesh(eggGeo(r, r * 0.9, 0, 10), shell);
     s.position.set(x, y, z);
     tail.add(s);
   }
-  const stinger = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.55, 8), dark);
-  stinger.position.set(0, 1.78, 0.55);
+  const stinger = new THREE.Mesh(spikeGeo(0.12, 0.55, 8), dark);
+  stinger.position.set(0, 1.94, 0.33);
   stinger.rotation.x = Math.PI * 0.7; // tip points forward-down
   tail.add(stinger);
   g.add(tail);
-  // Pincers: arm cylinders + fixed claw + movable claw cone, both sides.
+  // Pincers: tapered arm + chamfered palm + curved claw blades, both sides.
+  const clawPts: Array<[number, number]> = [
+    [0, 0],
+    [0.05, 0.08],
+    [0.045, 0.22],
+    [0.01, 0.32],
+    [-0.03, 0.2],
+    [-0.045, 0.06],
+  ];
   for (const side of [-1, 1]) {
-    const arm = add(new THREE.CylinderGeometry(0.09, 0.11, 0.55, 8), shell, side * 0.55, 0.42, -0.6);
+    const arm = add(limbGeo(0.11, 0.09, 0.55, 8), shell, side * 0.55, 0.42, -0.6);
     arm.rotation.set(Math.PI / 2 - 0.25, 0, side * 0.5);
-    const palm = add(new THREE.BoxGeometry(0.16, 0.12, 0.34), plate, side * 0.78, 0.42, -1.0);
+    const palm = add(rboxGeo(0.16, 0.12, 0.34, 0.03), plate, side * 0.78, 0.42, -1.0);
     palm.rotation.y = side * 0.15;
-    const clawFixed = add(new THREE.ConeGeometry(0.06, 0.32, 6), dark, side * 0.82, 0.44, -1.28);
+    const clawFixed = add(bladeGeo(clawPts, 0.04), dark, side * 0.82, 0.44, -1.28);
     clawFixed.rotation.x = -Math.PI / 2;
-    const clawMove = add(new THREE.ConeGeometry(0.05, 0.26, 6), dark, side * 0.72, 0.48, -1.26);
+    const clawMove = add(bladeGeo(clawPts, 0.04), dark, side * 0.72, 0.48, -1.26);
     clawMove.rotation.x = -Math.PI / 2;
     clawMove.rotation.z = side * 0.35;
   }
-  // 8 legs: one thin cylinder each, angled down-out (4 per side).
+  // 8 legs: one tapered limb each, angled down-out (4 per side).
   for (const side of [-1, 1]) {
     for (let i = 0; i < 4; i += 1) {
       const z = -0.45 + i * 0.42;
-      const leg = add(new THREE.CylinderGeometry(0.045, 0.03, 0.75, 6), dark, side * 0.62, 0.28, z);
+      const leg = add(limbGeo(0.03, 0.045, 0.75, 6), dark, side * 0.62, 0.28, z);
       leg.rotation.z = side * 1.05;
       leg.rotation.x = (i - 1.5) * 0.12;
     }
@@ -237,58 +306,70 @@ function makeMummy(color: number, scale: number): { group: THREE.Group; ring: TH
   const wrapDark = new THREE.MeshStandardMaterial({ color: 0xb8a888, roughness: 0.95 });
   const wrapLight = new THREE.MeshStandardMaterial({ color: 0xe8dfc8, roughness: 0.9 });
   const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffd24a, roughness: 0.3, emissive: 0xffb400, emissiveIntensity: 2.2 });
+  applyFresnelRim(wrap, 0xfff2cc, 0.4);
   const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh => {
     const m = new THREE.Mesh(geo, mat);
     m.position.set(x, y, z);
     g.add(m);
     return m;
   };
-  const body = add(new THREE.CapsuleGeometry(0.37, 0.9, 4, 12), wrap, 0, 0.95, 0);
-  void body;
+  // Bandaged body: lathe with a waist and rounded shoulders (not a capsule).
+  const body = add(
+    latheProfile([
+      [0.001, 0],
+      [0.28, 0.03],
+      [0.36, 0.18],
+      [0.37, 0.5],
+      [0.35, 0.85],
+      [0.37, 1.15],
+      [0.33, 1.4],
+      [0.22, 1.55],
+      [0.001, 1.62],
+    ]),
+    wrap, 0, 0.13, 0,
+  );
+  rimShellOf(body, 0xfff2cc, 0.25);
   // Wrap strips around the torso: only 4, thin, so they read as bandages
   // on a body instead of a stack of rings (the first version looked like
-  // a beehive). Alternating tones, slightly proud of the capsule.
+  // a beehive). Alternating tones, slightly proud of the body.
   const stripYs = [0.62, 0.9, 1.18, 1.44];
   stripYs.forEach((y, i) => {
-    const strip = add(
-      new THREE.TorusGeometry(0.375, 0.035, 6, 16),
-      i % 2 === 0 ? wrapDark : wrapLight,
-      0, y, 0,
-    );
-    strip.rotation.x = Math.PI / 2;
+    add(bandGeo(0.375, 0.035, 16), i % 2 === 0 ? wrapDark : wrapLight, 0, y, 0);
   });
   // Two diagonal strips across the chest.
-  const diag1 = add(new THREE.BoxGeometry(0.09, 0.85, 0.04), wrapLight, 0.08, 1.2, -0.33);
+  const diag1 = add(rboxGeo(0.09, 0.85, 0.04, 0.02), wrapLight, 0.08, 1.2, -0.33);
   diag1.rotation.z = 0.6;
-  const diag2 = add(new THREE.BoxGeometry(0.09, 0.85, 0.04), wrapDark, -0.08, 1.2, -0.33);
+  const diag2 = add(rboxGeo(0.09, 0.85, 0.04, 0.02), wrapDark, -0.08, 1.2, -0.33);
   diag2.rotation.z = -0.6;
-  // Head + wrap strips + glowing eyes (bigger, so they read at 8.5 m).
-  add(new THREE.SphereGeometry(0.3, 16, 12), wrap, 0, 1.85, 0);
-  const brow = add(new THREE.TorusGeometry(0.29, 0.04, 6, 16), wrapDark, 0, 1.97, 0);
-  brow.rotation.x = Math.PI / 2 - 0.35;
-  const chin = add(new THREE.TorusGeometry(0.28, 0.04, 6, 16), wrapLight, 0, 1.72, 0);
-  chin.rotation.x = Math.PI / 2 + 0.2;
-  add(new THREE.SphereGeometry(0.08, 8, 6), eyeMat, -0.11, 1.88, -0.26);
-  add(new THREE.SphereGeometry(0.08, 8, 6), eyeMat, 0.11, 1.88, -0.26);
+  // Head + wrap bands + glowing eyes (bigger, so they read at 8.5 m).
+  add(eggGeo(0.3, 0.32), wrap, 0, 1.85, 0);
+  const brow = add(bandGeo(0.29, 0.04, 16), wrapDark, 0, 1.97, 0);
+  brow.rotation.x = -0.35;
+  const chin = add(bandGeo(0.28, 0.04, 16), wrapLight, 0, 1.72, 0);
+  chin.rotation.x = 0.2;
+  for (const side of [-1, 1]) {
+    const eye = add(domeGeo(0.08, 0.06, 8), eyeMat, side * 0.11, 1.88, -0.26);
+    eye.rotation.x = -Math.PI / 2;
+  }
   // Arms raised forward (classic shambling pose), bandaged, thicker so the
   // reach reads at distance.
   for (const side of [-1, 1]) {
-    const arm = add(new THREE.CylinderGeometry(0.11, 0.1, 0.72, 8), wrap, side * 0.32, 1.28, -0.32);
+    const arm = add(limbGeo(0.1, 0.11, 0.72, 8), wrap, side * 0.32, 1.28, -0.32);
     arm.rotation.x = -1.25;
-    add(new THREE.SphereGeometry(0.11, 8, 6), wrapDark, side * 0.32, 1.42, -0.62);
-    const cuff = add(new THREE.TorusGeometry(0.12, 0.035, 6, 10), wrapLight, side * 0.32, 1.18, -0.18);
-    cuff.rotation.x = Math.PI / 2 - 1.25;
+    add(eggGeo(0.11, 0.12, 0, 8), wrapDark, side * 0.32, 1.42, -0.62);
+    const cuff = add(bandGeo(0.12, 0.035, 10), wrapLight, side * 0.32, 1.18, -0.18);
+    cuff.rotation.x = -1.25;
   }
   // Loose sash from the shoulder: breaks the torso's symmetry so the
   // silhouette isn't just stacked bands.
-  const sash = add(new THREE.BoxGeometry(0.12, 0.95, 0.03), wrapDark, 0.2, 1.05, -0.38);
+  const sash = add(rboxGeo(0.12, 0.95, 0.03, 0.015), wrapDark, 0.2, 1.05, -0.38);
   sash.rotation.z = 0.35;
   // Legs (bandaged, slightly apart) + tattered waist strips.
-  add(new THREE.CylinderGeometry(0.12, 0.1, 0.55, 8), wrapDark, -0.16, 0.3, 0);
-  add(new THREE.CylinderGeometry(0.12, 0.1, 0.55, 8), wrapDark, 0.16, 0.3, 0);
+  add(limbGeo(0.1, 0.12, 0.55, 8), wrapDark, -0.16, 0.3, 0);
+  add(limbGeo(0.1, 0.12, 0.55, 8), wrapDark, 0.16, 0.3, 0);
   const tatXs = [-0.25, 0, 0.25];
   tatXs.forEach((x, i) => {
-    const strip = add(new THREE.BoxGeometry(0.09, 0.4 + i * 0.08, 0.02), i % 2 === 0 ? wrapDark : wrapLight, x, 0.42, -0.36);
+    const strip = add(rboxGeo(0.09, 0.4 + i * 0.08, 0.02, 0.01), i % 2 === 0 ? wrapDark : wrapLight, x, 0.42, -0.36);
     strip.rotation.x = 0.1;
     strip.rotation.z = (i - 1) * 0.12;
   });
@@ -303,8 +384,661 @@ function makeMummy(color: number, scale: number): { group: THREE.Group; ring: TH
   g.scale.setScalar(scale);
   return { group: g, ring };
 }
+/** Shared telegraph ring for procedural mobs (shown during windup). */
+function mobRing(): THREE.Mesh {
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.9, 1.1, 32),
+    new THREE.MeshBasicMaterial({ color: 0xff2a1a, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }),
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.03;
+  ring.visible = false;
+  return ring;
+}
+
+/** Gold elite ring for bosses (always visible, under the telegraph ring). */
+function eliteRing(radius: number): THREE.Mesh {
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(radius, radius + 0.18, 40),
+    new THREE.MeshBasicMaterial({ color: 0xffc94a, side: THREE.DoubleSide, transparent: true, opacity: 0.6 }),
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.04;
+  return ring;
+}
+
 /**
- * Generic procedural mob placeholder (formiga/besouro/golem/cultista/serket):
+ * Detailed procedural giant ant (formiga gigante): three body segments,
+ * mandibles, antennae, 6 legs, amber eyes. Forward is -Z.
+ */
+function makeAnt(color: number, scale: number): { group: THREE.Group; ring: THREE.Mesh } {
+  const g = new THREE.Group();
+  const shell = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.15 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x2a1408, roughness: 0.7 });
+  const band = new THREE.MeshStandardMaterial({ color: 0xd8a05a, roughness: 0.5, metalness: 0.2 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffb400, roughness: 0.3, emissive: 0xcc8800, emissiveIntensity: 2.0 });
+  applyFresnelRim(shell, 0xffb400, 0.45);
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    g.add(m);
+    return m;
+  };
+  // Abdomen: big lathe egg at the rear, with two pale bands so the segments read.
+  const abd = add(eggGeo(0.55, 0.43), shell, 0, 0.5, 0.75);
+  abd.scale.set(1, 1, 1.35);
+  rimShellOf(abd, 0xffb400, 0.28);
+  for (const [z, r] of [[0.45, 0.5], [0.95, 0.52]] as Array<[number, number]>) {
+    const b = add(bandGeo(r, 0.055, 18), band, 0, 0.5, z);
+    b.rotation.x = -Math.PI / 2;
+  }
+  // Thorax (middle) + head (front).
+  const thorax = add(eggGeo(0.32, 0.26), shell, 0, 0.55, -0.1);
+  thorax.scale.set(0.9, 1, 1.15);
+  add(eggGeo(0.34, 0.31), dark, 0, 0.55, -0.6);
+  // Mandibles: two curved chamfered blades pointing forward-inward (the ant's weapon).
+  const mandPts: Array<[number, number]> = [
+    [0, 0],
+    [0.06, 0.1],
+    [0.05, 0.28],
+    [0.01, 0.4],
+    [-0.04, 0.22],
+    [-0.05, 0.05],
+  ];
+  for (const side of [-1, 1]) {
+    const mand = add(bladeGeo(mandPts, 0.05), dark, side * 0.2, 0.5, -0.95);
+    mand.rotation.x = -Math.PI / 2;
+    mand.rotation.z = side * -0.45;
+    const eye = add(domeGeo(0.075, 0.06, 8), eyeMat, side * 0.16, 0.68, -0.85);
+    eye.rotation.x = -Math.PI / 2;
+  }
+  // Antennae: thin tapered stalks with tip knobs, sweeping forward.
+  for (const side of [-1, 1]) {
+    const ant = add(limbGeo(0.015, 0.02, 0.6, 6), dark, side * 0.18, 0.85, -0.85);
+    ant.rotation.x = -0.9;
+    ant.rotation.z = side * 0.35;
+    add(eggGeo(0.05, 0.05, 0, 6), dark, side * 0.3, 1.05, -1.12);
+  }
+  // 6 legs: 3 per side, angled down-out (front pair from thorax, rear from abdomen).
+  const legZ = [-0.35, 0.05, 0.5];
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 3; i += 1) {
+      const leg = add(limbGeo(0.025, 0.04, 0.85, 6), dark, side * 0.55, 0.32, legZ[i] ?? 0);
+      leg.rotation.z = side * 1.1;
+      leg.rotation.x = (i - 1) * 0.15;
+    }
+  }
+  const ring = mobRing();
+  g.add(ring);
+  g.scale.setScalar(scale);
+  return { group: g, ring };
+}
+
+/**
+ * Detailed procedural desert beetle (besouro): domed metallic carapace with
+ * elytra split + bronze trim, forked rhinoceros horn, 6 thick legs.
+ * Forward is -Z.
+ */
+function makeBeetle(color: number, scale: number): { group: THREE.Group; ring: THREE.Mesh } {
+  const g = new THREE.Group();
+  const shell = new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.55 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x1a1a1e, roughness: 0.6, metalness: 0.3 });
+  const bronze = new THREE.MeshStandardMaterial({ color: 0xb08d3e, roughness: 0.35, metalness: 0.75 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xff7a20, roughness: 0.3, emissive: 0xcc4400, emissiveIntensity: 2.0 });
+  applyFresnelRim(shell, 0xd8b25a, 0.6);
+  applyFresnelRim(bronze, 0xffe9a0, 0.7);
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    g.add(m);
+    return m;
+  };
+  // Domed carapace (lathe ellipsoid, not a flattened sphere) + bronze rim
+  // at its base + elytra split down the middle.
+  const cara = add(eggGeo(0.72, 0.45), shell, 0, 0.55, 0.15);
+  cara.scale.set(1.1, 1, 1.3);
+  rimShellOf(cara, 0xd8b25a, 0.3);
+  const rim = add(bandGeo(0.78, 0.045, 24), bronze, 0, 0.42, 0.15);
+  rim.scale.set(1.1, 1, 1.3);
+  const split = add(rboxGeo(0.05, 0.06, 1.35, 0.02), dark, 0, 0.98, 0.15);
+  split.rotation.x = 0.06;
+  // Head + forked rhinoceros horn (the silhouette that says "beetle").
+  // The horn leans UP, not forward: from the fixed 2.5D camera a forward
+  // horn foreshortens into the carapace and vanishes.
+  add(eggGeo(0.3, 0.3), dark, 0, 0.5, -0.78);
+  const horn = add(spikeGeo(0.14, 1.1, 8), bronze, 0, 0.42, -0.81);
+  horn.rotation.x = -0.25;
+  const tinePts: Array<[number, number]> = [
+    [0, 0],
+    [0.04, 0.06],
+    [0.035, 0.18],
+    [0.01, 0.26],
+    [-0.03, 0.14],
+    [-0.035, 0.04],
+  ];
+  for (const side of [-1, 1]) {
+    const tine = add(spikeGeo(0.06, 0.5, 6), bronze, side * 0.12, 1.05, -1.03);
+    tine.rotation.x = -0.2;
+    tine.rotation.z = side * -0.4;
+    const eye = add(domeGeo(0.07, 0.06, 8), eyeMat, side * 0.18, 0.58, -0.98);
+    eye.rotation.x = -Math.PI / 2;
+    const mand = add(bladeGeo(tinePts, 0.04), dark, side * 0.14, 0.42, -1.08);
+    mand.rotation.x = -Math.PI / 2;
+  }
+  // 6 thick legs with bronze knee joints.
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 3; i += 1) {
+      const z = -0.45 + i * 0.55;
+      const leg = add(limbGeo(0.05, 0.07, 0.8, 6), dark, side * 0.68, 0.3, z);
+      leg.rotation.z = side * 1.0;
+      leg.rotation.x = (i - 1) * 0.14;
+      add(eggGeo(0.09, 0.09, 0, 8), bronze, side * 0.62, 0.48, z);
+    }
+  }
+  const ring = mobRing();
+  g.add(ring);
+  g.scale.setScalar(scale);
+  return { group: g, ring };
+}
+
+/**
+ * Detailed procedural sand golem (golem de areia): rounded sandstone
+ * boulder-body, glowing eyes under a heavy brow, boulder fists, back
+ * spikes. Retrabalho (merge rodada 3): a versão anterior lia como robô
+ * de blocos — torso, membros, cabeça e punhos eram caixas chanfradas.
+ * Agora nenhuma caixa: torso em lathe afilado (ombros mais largos que a
+ * cintura), pernas/braços em lathes afilados, ombreiras, joelhos e punhos
+ * em ovos arredondados, cabeça em ovo com sobrancelha em anel. Mantidas
+ * as rachaduras finas e os olhos laranja. Upright, ~2.3 m before the
+ * gamedata scale (1.6x). Forward is -Z.
+ */
+function makeGolem(color: number, scale: number): { group: THREE.Group; ring: THREE.Mesh } {
+  const g = new THREE.Group();
+  const stone = new THREE.MeshStandardMaterial({ color, roughness: 1, metalness: 0 });
+  const stoneDark = new THREE.MeshStandardMaterial({ color: 0x6b5d43, roughness: 1 });
+  const crack = new THREE.MeshStandardMaterial({ color: 0x3a2f1d, roughness: 1 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xff9a20, roughness: 0.3, emissive: 0xff7700, emissiveIntensity: 2.4 });
+  applyFresnelRim(stone, 0xffb050, 0.5);
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    g.add(m);
+    return m;
+  };
+  // Legs: tapered lathe columns, slightly splayed, darker than the torso;
+  // rounded knees + flattened-egg feet (no blocks anywhere).
+  for (const side of [-1, 1]) {
+    const leg = add(limbGeo(0.2, 0.15, 0.7, 10), stoneDark, side * 0.27, 0.35, 0);
+    leg.rotation.z = side * -0.08;
+    add(eggGeo(0.15, 0.15, 0, 10), stone, side * 0.27, 0.62, -0.06);
+    const foot = add(eggGeo(0.2, 0.12, 0, 10), stoneDark, side * 0.29, 0.07, -0.05);
+    foot.scale.set(1, 0.7, 1.4);
+  }
+  // Torso: lathe tapered the OTHER way from a block — waist 0.46, chest
+  // 0.62, shoulders 0.64 — flattened front-back. No flat chest plate: the
+  // cracks sit directly on the curved stone.
+  const torso = add(
+    latheProfile([
+      [0.001, 0],
+      [0.44, 0.02],
+      [0.5, 0.12],
+      [0.46, 0.35],
+      [0.5, 0.6],
+      [0.62, 0.85],
+      [0.64, 0.95],
+      [0.5, 1.08],
+      [0.28, 1.12],
+      [0.001, 1.15],
+    ]),
+    stone, 0, 0.7, 0,
+  );
+  torso.scale.set(1.08, 1, 0.8);
+  rimShellOf(torso, 0xffb050, 0.25);
+  // Thin crack slivers ON the curved chest (wide flat blades read as black
+  // tape, not cracks) + belt.
+  const crackPts: Array<[number, number]> = [
+    [0, 0],
+    [0.03, 0.06],
+    [0.018, 0.28],
+    [-0.008, 0.5],
+    [-0.035, 0.46],
+    [-0.015, 0.22],
+  ];
+  const crackBox = add(bladeGeo(crackPts, 0.02), crack, -0.15, 1.25, -0.48);
+  crackBox.rotation.z = 0.45;
+  const crackPts2: Array<[number, number]> = [
+    [0, 0],
+    [0.025, 0.05],
+    [0.012, 0.2],
+    [-0.008, 0.35],
+    [-0.03, 0.32],
+    [-0.012, 0.15],
+  ];
+  const crackBox2 = add(bladeGeo(crackPts2, 0.02), crack, 0.22, 1.2, -0.48);
+  crackBox2.rotation.z = -0.6;
+  const belt = add(
+    latheProfile([
+      [0.47, 0],
+      [0.5, 0.06],
+      [0.5, 0.1],
+      [0.47, 0.16],
+    ]),
+    stoneDark, 0, 0.74, 0,
+  );
+  belt.scale.set(1.05, 1, 0.78);
+  // Head: rounded egg, heavy brow as a stone ring (not a box), glowing eyes
+  // (big, so they read at 8.5 m), small crest spike on top.
+  add(eggGeo(0.24, 0.22, 0, 12), stone, 0, 2.05, 0).scale.set(1.15, 1, 1.05);
+  const brow = add(bandGeo(0.25, 0.035, 16), stoneDark, 0, 2.16, -0.02);
+  brow.rotation.x = 0.12;
+  for (const side of [-1, 1]) {
+    const eye = add(domeGeo(0.085, 0.07, 8), eyeMat, side * 0.11, 2.02, -0.26);
+    eye.rotation.x = -Math.PI / 2;
+  }
+  const crest = add(spikeGeo(0.08, 0.25, 6), stoneDark, 0, 2.26, 0);
+  crest.rotation.x = -0.15;
+  // Shoulders: rounded boulder pauldrons + spikes; arms: tapered lathes
+  // with rounded elbows and boulder fists.
+  for (const side of [-1, 1]) {
+    const pauldron = add(eggGeo(0.3, 0.26, 0, 12), stoneDark, side * 0.78, 1.78, 0);
+    pauldron.scale.set(1.1, 0.9, 1.1);
+    const spike = add(spikeGeo(0.11, 0.4, 6), stoneDark, side * 0.72, 1.95, 0);
+    spike.rotation.z = side * -0.25;
+    const upper = add(limbGeo(0.15, 0.13, 0.75, 10), stoneDark, side * 0.82, 1.35, 0);
+    upper.rotation.z = side * -0.1;
+    add(eggGeo(0.13, 0.13, 0, 10), stoneDark, side * 0.84, 1.0, 0);
+    const fore = add(limbGeo(0.13, 0.15, 0.6, 10), stoneDark, side * 0.85, 0.78, -0.02);
+    fore.rotation.z = side * -0.06;
+    const fist = add(eggGeo(0.2, 0.22, 0, 10), stone, side * 0.86, 0.42, -0.02);
+    fist.scale.set(1, 1.1, 1);
+  }
+  const backSpike = add(spikeGeo(0.12, 0.45, 6), stoneDark, 0, 1.75, 0.27);
+  backSpike.rotation.x = 0.5;
+  const ring = mobRing();
+  g.add(ring);
+  g.scale.setScalar(scale);
+  return { group: g, ring };
+}
+
+/**
+ * Detailed procedural cultist (cultista de Serket): floor-length purple robe
+ * with gold hem, hood shadowing glowing eyes, staff with a floating orb.
+ * Forward is -Z.
+ */
+function makeCultist(color: number, scale: number): { group: THREE.Group; ring: THREE.Mesh } {
+  const g = new THREE.Group();
+  const robe = new THREE.MeshStandardMaterial({ color, roughness: 0.9 });
+  const robeDark = new THREE.MeshStandardMaterial({ color: 0x3a1245, roughness: 0.9 });
+  const gold = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.35, metalness: 0.7 });
+  const crimson = new THREE.MeshStandardMaterial({ color: 0x8a1f2d, roughness: 0.8 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xc06aff, roughness: 0.3, emissive: 0x9933ff, emissiveIntensity: 2.4 });
+  const orbMat = new THREE.MeshStandardMaterial({ color: 0xd9a0ff, roughness: 0.2, emissive: 0x9933ff, emissiveIntensity: 2.2 });
+  applyFresnelRim(robe, 0xc06aff, 0.5);
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    g.add(m);
+    return m;
+  };
+  // Robe: flared lathe gown (waist + hem lip), gold hem ring + belt + crimson sash.
+  const robeMesh = add(
+    latheProfile([
+      [0.001, 0],
+      [0.5, 0.02],
+      [0.56, 0.12],
+      [0.5, 0.5],
+      [0.42, 0.9],
+      [0.36, 1.25],
+      [0.33, 1.5],
+      [0.3, 1.62],
+      [0.001, 1.66],
+    ]),
+    robe, 0, 0.02, 0,
+  );
+  rimShellOf(robeMesh, 0xc06aff, 0.3);
+  add(bandGeo(0.55, 0.05, 20), gold, 0, 0.08, 0);
+  add(bandGeo(0.41, 0.04, 16), gold, 0, 1.02, 0);
+  const sash = add(rboxGeo(0.11, 0.9, 0.04, 0.02), crimson, 0.1, 1.35, -0.38);
+  sash.rotation.z = 0.55;
+  // Hood: pointed lathe, face in shadow with glowing eyes.
+  add(
+    latheProfile([
+      [0.001, 0],
+      [0.26, 0.04],
+      [0.32, 0.18],
+      [0.3, 0.32],
+      [0.2, 0.48],
+      [0.08, 0.58],
+      [0.001, 0.62],
+    ]),
+    robeDark, 0, 1.6, 0,
+  );
+  add(eggGeo(0.21, 0.22), new THREE.MeshStandardMaterial({ color: 0x0d0612, roughness: 1 }), 0, 1.82, -0.1);
+  for (const side of [-1, 1]) {
+    const eye = add(domeGeo(0.05, 0.04, 8), eyeMat, side * 0.08, 1.86, -0.28);
+    eye.rotation.x = -Math.PI / 2;
+  }
+  // Sleeves reaching forward to the staff.
+  for (const side of [-1, 1]) {
+    const sleeve = add(limbGeo(0.08, 0.09, 0.6, 8), robe, side * 0.3, 1.35, -0.22);
+    sleeve.rotation.x = -1.1;
+  }
+  // Staff: tall tapered lathe rod + floating purple orb on top.
+  const staff = add(limbGeo(0.035, 0.03, 2.2, 8), robeDark, 0.48, 1.1, -0.15);
+  staff.rotation.z = -0.06;
+  add(eggGeo(0.14, 0.14, 0, 12), orbMat, 0.55, 2.28, -0.18);
+  const ring = mobRing();
+  g.add(ring);
+  g.scale.setScalar(scale);
+  return { group: g, ring };
+}
+
+/**
+ * Neferet, boss das Tumbas: múmia nobre feminina — mesma base da múmia
+ * comum, mas com coroa dourada de rubi, colar e peitoral de ouro, cetro com
+ * ankh e anel de elite. Maior (gamedata scale 1.6). Forward is -Z.
+ */
+function makeNeferet(color: number, scale: number): { group: THREE.Group; ring: THREE.Mesh } {
+  const g = new THREE.Group();
+  const wrap = new THREE.MeshStandardMaterial({ color, roughness: 0.95 });
+  const gold = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.3, metalness: 0.8 });
+  const ruby = new THREE.MeshStandardMaterial({ color: 0xc01030, roughness: 0.25, emissive: 0x880018, emissiveIntensity: 1.2 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffd24a, roughness: 0.3, emissive: 0xffb400, emissiveIntensity: 2.4 });
+  applyFresnelRim(wrap, 0xffd24a, 0.4);
+  applyFresnelRim(gold, 0xffe9a0, 0.7);
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    g.add(m);
+    return m;
+  };
+  // Noble robe (not the common mummy's stacked wrap rings — those read as
+  // a beehive at boss scale): lathe gown + thin gold bands + chest plate.
+  const robeMesh = add(
+    latheProfile([
+      [0.001, 0],
+      [0.44, 0.02],
+      [0.52, 0.1],
+      [0.48, 0.4],
+      [0.42, 0.8],
+      [0.37, 1.15],
+      [0.34, 1.4],
+      [0.001, 1.5],
+    ]),
+    wrap, 0, 0, 0,
+  );
+  rimShellOf(robeMesh, 0xffd24a, 0.3);
+  add(bandGeo(0.5, 0.045, 18), gold, 0, 0.06, 0);
+  for (const y of [0.95, 1.3]) {
+    add(bandGeo(0.4, 0.03, 16), gold, 0, y, 0);
+  }
+  add(rboxGeo(0.42, 0.5, 0.06, 0.03), gold, 0, 1.2, -0.36);
+  add(bandGeo(0.32, 0.06, 16), gold, 0, 1.56, 0);
+  // Head + tall gold crown (flared lathe band + 5 splayed spikes + ruby) + glowing eyes.
+  add(eggGeo(0.3, 0.32), wrap, 0, 1.85, 0);
+  add(
+    latheProfile([
+      [0.27, 0],
+      [0.29, 0.06],
+      [0.29, 0.12],
+      [0.27, 0.18],
+    ]),
+    gold, 0, 1.99, 0,
+  );
+  for (let i = 0; i < 5; i += 1) {
+    const a = (i / 5) * Math.PI * 2;
+    const point = add(spikeGeo(0.055, 0.3, 6), gold, Math.sin(a) * 0.25, 2.12, Math.cos(a) * 0.25);
+    point.rotation.z = -Math.sin(a) * 0.4;
+    point.rotation.x = Math.cos(a) * 0.4;
+  }
+  add(eggGeo(0.08, 0.08, 0, 8), ruby, 0, 2.08, -0.28);
+  for (const side of [-1, 1]) {
+    const eye = add(domeGeo(0.09, 0.07, 8), eyeMat, side * 0.11, 1.88, -0.26);
+    eye.rotation.x = -Math.PI / 2;
+  }
+  // Arms raised forward, gold (wrap-colored arms vanish against the robe).
+  for (const side of [-1, 1]) {
+    const arm = add(limbGeo(0.1, 0.11, 0.72, 8), gold, side * 0.32, 1.28, -0.32);
+    arm.rotation.x = -1.25;
+    add(eggGeo(0.11, 0.12, 0, 8), gold, side * 0.32, 1.42, -0.62);
+    const cuff = add(bandGeo(0.12, 0.035, 10), gold, side * 0.32, 1.18, -0.18);
+    cuff.rotation.x = -1.25;
+  }
+  // Scepter with ankh (right hand): gold lathe rod + ring + cross on top.
+  const rod = add(limbGeo(0.03, 0.03, 1.9, 8), gold, 0.52, 1.0, -0.3);
+  rod.rotation.z = -0.05;
+  const ankhRing = add(bandGeo(0.1, 0.03, 14), gold, 0.57, 2.02, -0.3);
+  ankhRing.rotation.x = -Math.PI / 2;
+  add(rboxGeo(0.05, 0.22, 0.05, 0.015), gold, 0.57, 1.82, -0.3);
+  add(rboxGeo(0.2, 0.05, 0.05, 0.015), gold, 0.57, 1.86, -0.3);
+  const ring = mobRing();
+  g.add(ring);
+  g.add(eliteRing(1.35));
+  g.scale.setScalar(scale);
+  return { group: g, ring };
+}
+
+/**
+ * Serket, boss do Templo — MULHER híbrida de escorpião, como a arte de
+ * loading (loading_serket.jpg): torso humano feminino de vestido carmesim
+ * e cabelo preto longo sobre um corpo de escorpião (8 pernas, pinças,
+ * cauda alta com ferrão), olhos vermelhos brilhantes. Nunca múmia.
+ * Retrabalho (merge rodada 3): a versão anterior lia como sino vermelho —
+ * o vestido flare cobria o corpo de escorpião, a cabeça era minúscula e
+ * as pinças eram caixas douradas. Agora: vestido JUSTO (a parte mais
+ * larga é o busto, não a barra), torso humano alto com pele clara em
+ * contraste com o corselete carmesim, cabeça e cabelo grandes, pinças
+ * em forma de garra (lâminas, nunca caixa) e cauda lateral, visível de
+ * frente ao lado do corpo — como na referência. Forward is -Z. Returns
+ * the tail group for the sway animation.
+ */
+function makeSerket(color: number, scale: number): { group: THREE.Group; ring: THREE.Mesh; tail: THREE.Group } {
+  const g = new THREE.Group();
+  const shell = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.15 });
+  const shellDark = new THREE.MeshStandardMaterial({ color: 0x4a0f16, roughness: 0.6 });
+  const gold = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.3, metalness: 0.8 });
+  const skin = new THREE.MeshStandardMaterial({ color: 0xf0c49a, roughness: 0.5 });
+  const hair = new THREE.MeshStandardMaterial({ color: 0x140a08, roughness: 0.85 });
+  const dress = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xff2020, roughness: 0.3, emissive: 0xdd0000, emissiveIntensity: 2.4 });
+  applyFresnelRim(dress, 0xff5040, 0.55);
+  applyFresnelRim(skin, 0xffd0a0, 0.4);
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    g.add(m);
+    return m;
+  };
+  // Scorpion lower body: cephalothorax + abdomen segments (rear, +Z) as lathe eggs.
+  // DARK shell (not the dress crimson) and FLAT + WIDE (low horizontal
+  // body, never a ball): a round mass under the gown reads as a skirt, a
+  // low wide mass with splayed legs reads as a scorpion body. The human
+  // torso emerges from the FRONT of the cephalothorax — from the front the
+  // scorpion body stays visible at the sides.
+  const ceph = add(eggGeo(0.55, 0.39), shellDark, 0, 0.45, 0.3);
+  ceph.scale.set(1.35, 0.72, 1.15);
+  const abd1 = add(eggGeo(0.5, 0.34), shell, 0, 0.45, 0.95);
+  abd1.scale.set(1.15, 0.75, 1.0);
+  const abd2 = add(eggGeo(0.4, 0.26), shellDark, 0, 0.48, 1.35);
+  abd2.scale.set(1, 0.75, 0.9);
+  // 8 scorpion legs: THICK, crimson (they stand out against the dark body
+  // and the sand), roots outside the cephalothorax so the tips splay well
+  // beyond its silhouette. No gold ring around the body — it read as a skirt hem.
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 4; i += 1) {
+      const z = -0.35 + i * 0.4;
+      const leg = add(limbGeo(0.1, 0.12, 1.3, 6), shell, side * 0.85, 0.32, z);
+      leg.rotation.z = side * 1.25;
+      leg.rotation.x = (i - 1.5) * 0.12;
+    }
+  }
+  // Pincers: gold claw palms (elongated eggs, never boxes) + two big curved
+  // blade fingers each, open like a claw — the scorpion tell from the front.
+  // The blades dominate the palm (a small blade on a big gold ball reads as
+  // a leaf); they point forward, splayed outward, clear of the body.
+  const clawFingerPts: Array<[number, number]> = [
+    [0, 0],
+    [0.12, 0.07],
+    [0.16, 0.27],
+    [0.12, 0.51],
+    [0.04, 0.7],
+    [-0.03, 0.48],
+    [-0.07, 0.24],
+    [-0.05, 0.08],
+  ];
+  const clawThumbPts: Array<[number, number]> = [
+    [0, 0],
+    [0.1, 0.06],
+    [0.13, 0.2],
+    [0.08, 0.39],
+    [0.01, 0.5],
+    [-0.03, 0.28],
+    [-0.06, 0.11],
+  ];
+  for (const side of [-1, 1]) {
+    const arm = add(limbGeo(0.12, 0.1, 0.6, 8), shell, side * 0.62, 0.8, -0.45);
+    arm.rotation.set(Math.PI / 2 - 0.25, 0, side * 0.5);
+    const palm = add(eggGeo(0.17, 0.14), gold, side * 1.05, 0.82, -1.0);
+    palm.scale.set(1, 0.8, 1.4);
+    const finger = add(bladeGeo(clawFingerPts, 0.06), gold, side * 1.13, 0.84, -1.34);
+    finger.rotation.x = -Math.PI / 2;
+    finger.rotation.y = side * -0.3;
+    const thumb = add(bladeGeo(clawThumbPts, 0.06), gold, side * 0.93, 0.84, -1.32);
+    thumb.rotation.x = -Math.PI / 2;
+    thumb.rotation.y = side * 0.45;
+  }
+  // Tail: arcs up BESIDE the body (her left, +X) so it reads from the front
+  // instead of hiding behind the torso; stinger points forward above the
+  // shoulder. Segments OVERLAP (taller eggs, closer spacing) — separate
+  // balls read as floating balloons. Dark shell, like the body. Animated
+  // sway like the scorpion's.
+  const tail = new THREE.Group();
+  const tailSegs: Array<[number, number, number, number]> = [
+    [0.82, 0.85, 1.25, 0.26],
+    [0.9, 1.3, 1.05, 0.24],
+    [0.88, 1.75, 0.8, 0.22],
+    [0.78, 2.2, 0.5, 0.2],
+  ];
+  for (const [x, y, z, r] of tailSegs) {
+    const s = new THREE.Mesh(eggGeo(r, r * 1.15, 0, 10), shellDark);
+    s.position.set(x, y, z);
+    tail.add(s);
+  }
+  const stinger = new THREE.Mesh(spikeGeo(0.16, 0.75, 8), shellDark);
+  stinger.position.set(0.7, 2.55, 0.1);
+  stinger.rotation.x = Math.PI * 0.62;
+  stinger.rotation.z = -0.25;
+  tail.add(stinger);
+  g.add(tail);
+  // Human torso: SLIM crimson gown — hips 0.30, waist 0.24, bust 0.32: the
+  // widest point is the bust, like a woman, never the hem (no bell). The
+  // gown merges into the cephalothorax; pale skin chest + arms contrast
+  // against the crimson so the human half reads at 8.5 m.
+  const bodice = add(
+    latheProfile([
+      [0.001, 0],
+      [0.28, 0.02],
+      [0.3, 0.15],
+      [0.26, 0.45],
+      [0.28, 0.7],
+      [0.32, 0.9],
+      [0.3, 1.05],
+      [0.001, 1.08],
+    ]),
+    dress, 0, 0.75, -0.05,
+  );
+  rimShellOf(bodice, 0xff5040, 0.3);
+  // Single thin gold waistband + under-bust line + center gem (no stacked rings).
+  add(bandGeo(0.27, 0.03, 18), gold, 0, 1.28, -0.05);
+  add(bandGeo(0.31, 0.025, 18), gold, 0, 1.62, -0.05);
+  add(eggGeo(0.07, 0.07, 0, 8), gold, 0, 1.78, -0.36);
+  // Pale skin chest above the neckline + neck.
+  const chest = add(eggGeo(0.3, 0.24), skin, 0, 1.95, -0.1);
+  chest.scale.set(1.15, 1, 0.85);
+  add(limbGeo(0.09, 0.11, 0.28, 8), skin, 0, 2.08, -0.05);
+  // Arms: skin, thicker than before, hanging forward at the sides; gold
+  // pauldrons (flattened eggs, not balls) + gold wrist bracers; skin hands.
+  for (const side of [-1, 1]) {
+    const pauldron = add(eggGeo(0.16, 0.12), gold, side * 0.38, 1.92, -0.05);
+    pauldron.scale.set(1.2, 0.8, 1.2);
+    const upper = add(limbGeo(0.07, 0.08, 0.5, 8), skin, side * 0.46, 1.66, -0.1);
+    upper.rotation.z = side * 0.22;
+    const fore = add(limbGeo(0.055, 0.065, 0.45, 8), skin, side * 0.52, 1.26, -0.18);
+    fore.rotation.z = side * 0.12;
+    fore.rotation.x = -0.25;
+    add(bandGeo(0.075, 0.02, 10), gold, side * 0.54, 1.06, -0.22);
+    add(eggGeo(0.06, 0.08, 0, 8), skin, side * 0.55, 0.98, -0.26);
+  }
+  // Head: BIGGER face (0.32 vs 0.26 before) with long black hair — a back
+  // mass flowing to mid-torso, a cap, and two front locks framing the face
+  // so the hair reads from the front too. Gold circlet, large red eyes.
+  add(eggGeo(0.32, 0.34), skin, 0, 2.28, -0.05);
+  const hairBack = add(
+    latheProfile([
+      [0.001, 0],
+      [0.3, 0.05],
+      [0.36, 0.35],
+      [0.33, 0.7],
+      [0.22, 1.1],
+      [0.08, 1.35],
+      [0.001, 1.4],
+    ]),
+    hair, 0, 1.35, 0.16,
+  );
+  hairBack.rotation.x = 0.3;
+  add(eggGeo(0.33, 0.28), hair, 0, 2.38, 0.06);
+  for (const side of [-1, 1]) {
+    const lock = add(limbGeo(0.07, 0.09, 0.55, 8), hair, side * 0.26, 2.05, -0.18);
+    lock.rotation.x = 0.18;
+    lock.rotation.z = side * -0.12;
+  }
+  const circlet = add(bandGeo(0.32, 0.035, 18), gold, 0, 2.42, -0.05);
+  circlet.rotation.x = -0.25;
+  for (const side of [-1, 1]) {
+    const eye = add(domeGeo(0.065, 0.05, 8), eyeMat, side * 0.12, 2.3, -0.34);
+    eye.rotation.x = -Math.PI / 2;
+  }
+  // Stinger tip glint: small red gem at the tail base.
+  add(eggGeo(0.07, 0.07, 0, 8), eyeMat, 0, 0.95, 1.28);
+  const ring = mobRing();
+  g.add(ring);
+  g.add(eliteRing(1.6));
+  g.scale.setScalar(scale);
+  return { group: g, ring, tail };
+}
+
+/** Build the right procedural model for a mobId (color/scale from gamedata). */
+function buildMobModel(
+  mobId: string,
+  color: number,
+  scale: number,
+): { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group } {
+  switch (mobId) {
+    case "escorpiao":
+    case "escorpiao_alfa":
+      return makeScorpion(color, scale);
+    case "mumia":
+    case "mumia_ancia":
+      return makeMummy(color, scale);
+    case "formiga":
+      return makeAnt(color, scale);
+    case "besouro":
+      return makeBeetle(color, scale);
+    case "golem_areia":
+      return makeGolem(color, scale);
+    case "cultista_serket":
+      return makeCultist(color, scale);
+    case "neferet":
+      return makeNeferet(color, scale);
+    case "serket":
+      return makeSerket(color, scale);
+    default:
+      return makeMob(color, scale, false);
+  }
+}
+
+/**
+ * Generic procedural mob placeholder (fallback for unknown mobIds):
  * color/scale come from gamedata. Horizontal insectoids get a stinger/tail;
  * upright mobs stand like a player capsule. No external assets.
  * Returns the group plus the telegraph ring (shown during windup, animState 9).
@@ -313,29 +1047,34 @@ function makeMob(color: number, scale: number, upright: boolean): { group: THREE
   const g = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.9, metalness: 0.05 });
   if (upright) {
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.9, 4, 12), mat);
-    body.position.y = 0.95;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12), mat);
+    const body = new THREE.Mesh(
+      latheProfile([
+        [0.001, 0],
+        [0.3, 0.05],
+        [0.35, 0.5],
+        [0.33, 0.9],
+        [0.24, 1.25],
+        [0.001, 1.35],
+      ]),
+      mat,
+    );
+    body.position.y = 0.28;
+    const head = new THREE.Mesh(eggGeo(0.28, 0.3), mat);
     head.position.y = 1.85;
     g.add(body, head);
   } else {
-    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.32, 0.7, 4, 10), mat);
+    const body = new THREE.Mesh(eggGeo(0.32, 0.5), mat);
     body.rotation.x = Math.PI / 2;
     body.position.y = 0.45;
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 10), mat);
+    const head = new THREE.Mesh(eggGeo(0.26, 0.28), mat);
     head.position.set(0, 0.5, -0.65);
-    const tail = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.7, 8), mat);
+    const tail = new THREE.Mesh(spikeGeo(0.12, 0.7, 8), mat);
     tail.rotation.x = Math.PI / 2 + 0.5;
-    tail.position.set(0, 0.75, 0.75);
+    tail.position.set(0, 0.92, 0.44);
     g.add(body, head, tail);
   }
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(0.9, 1.1, 32),
-    new THREE.MeshBasicMaterial({ color: 0xff2a1a, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }),
-  );
-  ring.rotation.x = -Math.PI / 2;
-  ring.position.y = 0.03;
-  ring.visible = false;
+  // Telegraph ring (flat gameplay indicator, not a model part — same as mobRing()).
+  const ring = mobRing();
   g.add(ring);
   g.scale.setScalar(scale);
   return { group: g, ring };
@@ -400,7 +1139,10 @@ function makeInstanced(
 }
 
 // ---------------------------------------------------------------------------
-// GLB character rig (warrior_f_r64_final.glb, Rigify DEF chain, no clips).
+// GLB character rig (warrior_f_r64_final.glb, Rigify DEF chain, no clips;
+// warrior_m_r64_final_rigged.glb shares the same DEF bone names/axes on a
+// 34-bone chain transferred from the female, so the pose code below drives
+// both genders unchanged).
 // The GLB has no animations, so the pose is procedural: every frame the
 // animated DEF bones get a small LOCAL rotation delta on top of their rest
 // quaternion (base * delta — never overwrite the rest pose). Bone axes were
@@ -431,6 +1173,45 @@ const GLB_LIMB_BONES = [
 /** Spine segments share the torso pitch (weights sum to 1); twist on DEF-spine only. */
 const GLB_SPINE_BONES = ["DEF-spine", "DEF-spine.001", "DEF-spine.002", "DEF-spine.003"] as const;
 const GLB_SPINE_PITCH_SHARE = [0.35, 0.25, 0.2, 0.2];
+
+/**
+ * Canonical DEF bone names (dotted, as written in the GLB files and used
+ * by the pose code below). three's GLTFLoader sanitizes node names
+ * (PropertyBinding: "." is reserved, so "DEF-hand.R" loads as "DEF-handR"
+ * and "DEF-thigh.L.001" as "DEF-thighL001") — without this mapping the
+ * pose targets and the hand lookups never match a loaded bone, so the
+ * rig stays in rest pose and no class weapon attaches. The bones map in
+ * makeGlbInstance is keyed by the canonical name (see glbCanonicalBoneName).
+ */
+const GLB_KNOWN_BONES = [
+  ...GLB_LIMB_BONES,
+  ...GLB_LIMB_BONES.map((n) => `${n}.001`),
+  ...GLB_SPINE_BONES,
+  "DEF-spine.004",
+  "DEF-spine.005",
+  "DEF-spine.006",
+  "DEF-hand.L",
+  "DEF-hand.R",
+  "DEF-forearm.L",
+  "DEF-forearm.R",
+  "DEF-foot.L",
+  "DEF-foot.R",
+  "DEF-toe.L",
+  "DEF-toe.R",
+  "DEF-pelvis.L",
+  "DEF-pelvis.R",
+  "DEF-shoulder.L",
+  "DEF-shoulder.R",
+  "DEF-breast.L",
+  "DEF-breast.R",
+] as const;
+const GLB_BONE_BY_SANITIZED = new Map<string, string>(
+  GLB_KNOWN_BONES.map((n) => [n.replace(/\./g, ""), n]),
+);
+/** Map a loaded (sanitized) bone name back to its canonical dotted name. */
+function glbCanonicalBoneName(loaded: string): string {
+  return GLB_BONE_BY_SANITIZED.get(loaded) ?? loaded;
+}
 
 interface GlbPoseAngles {
   x: number;
@@ -597,11 +1378,11 @@ function glbWeaponMats(): {
  */
 function makeHandSword(mats: ReturnType<typeof glbWeaponMats>): THREE.Group {
   const g = new THREE.Group();
-  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.75, 0.015), mats.steel);
+  const blade = new THREE.Mesh(swordBladeGeo(), mats.steel);
   blade.position.y = 0.48;
-  const guard = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.04), mats.gold);
+  const guard = new THREE.Mesh(chamferedBoxGeo(0.16, 0.03, 0.04, 0.008), mats.gold);
   guard.position.y = 0.09;
-  const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.16, 8), mats.grip);
+  const handle = new THREE.Mesh(limbGeo(0.02, 0.02, 0.16, 8), mats.grip);
   g.add(blade, guard, handle);
   g.rotation.x = Math.PI;
   return g;
@@ -609,9 +1390,9 @@ function makeHandSword(mats: ReturnType<typeof glbWeaponMats>): THREE.Group {
 
 function makeHandStaff(mats: ReturnType<typeof glbWeaponMats>): THREE.Group {
   const g = new THREE.Group();
-  const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.028, 1.6, 8), mats.grip);
+  const staff = new THREE.Mesh(limbGeo(0.028, 0.022, 1.6, 8), mats.grip);
   staff.position.y = 0.7;
-  const orb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 10), mats.holy);
+  const orb = new THREE.Mesh(eggGeo(0.09, 0.09, 0, 12, 10), mats.holy);
   orb.position.y = 1.55;
   g.add(staff, orb);
   g.rotation.x = Math.PI;
@@ -625,10 +1406,10 @@ function makeHandStaff(mats: ReturnType<typeof glbWeaponMats>): THREE.Group {
  */
 function makeHandRifle(mats: ReturnType<typeof glbWeaponMats>): THREE.Group {
   const g = new THREE.Group();
-  const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.8, 10), mats.steel);
+  const barrel = new THREE.Mesh(limbGeo(0.035, 0.035, 0.8, 10), mats.steel);
   barrel.rotation.x = Math.PI / 2;
   barrel.position.z = -0.3;
-  const stock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.3), mats.grip);
+  const stock = new THREE.Mesh(chamferedBoxGeo(0.08, 0.14, 0.3, 0.02), mats.grip);
   stock.position.set(0, -0.03, 0.12);
   g.add(barrel, stock);
   g.rotation.y = -0.67;
@@ -637,9 +1418,11 @@ function makeHandRifle(mats: ReturnType<typeof glbWeaponMats>): THREE.Group {
 
 function makeHandShield(mats: ReturnType<typeof glbWeaponMats>): THREE.Group {
   const g = new THREE.Group();
-  const shield = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.04, 20), mats.steel);
-  shield.rotation.x = Math.PI / 2;
-  const boss = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), mats.gold);
+  const shield = new THREE.Mesh(shieldGeo(), mats.steel);
+  // Domo da face externa para -Z (para frente, como o boss).
+  shield.rotation.x = -Math.PI / 2;
+  const boss = new THREE.Mesh(domeGeo(0.08, 0.06), mats.gold);
+  boss.rotation.x = -Math.PI / 2;
   boss.position.z = -0.03;
   g.add(shield, boss);
   return g;
@@ -800,6 +1583,9 @@ export class WorldView {
     glbWeaponClass?: string;
   }>();
   private readonly mobs = new Map<number, { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group }>();
+  /** Debug-only visual mobs (?testmobs= in main.ts): not server entities,
+   *  never in the mobs map, so snapshots can't remove them. */
+  private readonly testMobs: Array<{ group: THREE.Group; tail?: THREE.Group }> = [];
   /** M2: the local player's CharForge character (LOD0). Null = capsule fallback. */
   private localCharacter: CharacterBuild | null = null;
   /** Last genome handed to setLocalGenome (gender for the GLB scale). */
@@ -808,10 +1594,21 @@ export class WorldView {
   private glbTemplate: THREE.Group | null = null;
   private glbTriangles = 0;
   private glbLoadPromise: Promise<boolean> | null = null;
-  /** Real male mesh (warrior_m_r64_final_apose.glb, static, no rig). */
+  /** Real male mesh (warrior_m_r64_final_rigged.glb, 34-bone DEF rig
+   *  transferred from the female — same bone names/axes, same pose code). */
   private glbTemplateM: THREE.Group | null = null;
   private glbTrianglesM = 0;
   private glbLoadPromiseM: Promise<boolean> | null = null;
+  // --- Scenery GLBs (rodada 3) + Zero Primitivas placeholders --------------
+  /** Loaded scenery GLB templates by key (temple/house/stall/palm). */
+  private readonly sceneryTemplates = new Map<string, THREE.Group>();
+  /** Procedural placeholders, tagged userData.sceneryKey — removed when the
+   *  matching GLB template loads (the scene is never empty meanwhile). */
+  private readonly sceneryPlaceholders: THREE.Object3D[] = [];
+  /** Placements recorded while building, reused by the GLB swap. */
+  private readonly housePlacements: Array<{ x: number; z: number; ry: number; s: number }> = [];
+  private readonly palmPlacements: Array<{ x: number; y: number; z: number; ry: number; s: number }> = [];
+  private readonly stallPlacements: Array<{ x: number; z: number; ry: number }> = [];
   /** "auto" = GLB when it loads, CharForge/capsule until then (default);
    *  "glb" = force the GLB (?char=warrior); "capsule" = never load it. */
   private charMode: "auto" | "glb" | "capsule" = "auto";
@@ -1044,20 +1841,22 @@ export class WorldView {
   // in buildProps (fixed positions from gamedata, never moved).
   // -------------------------------------------------------------------------
 
-  /** Shared materials for one zone build (city palette: jade/crimson/gold). */
+  /** Shared materials for one zone build (city palette: jade/crimson/gold).
+   * Zero Primitivas: structural materials use organicMaterial (Fresnel rim)
+   * from procedural.ts. */
   private makeZoneMats(dungeon: boolean): ZoneMats {
     return {
-      wall: new THREE.MeshStandardMaterial({ color: dungeon ? 0x6a5a48 : 0xe8dcc0, roughness: 0.9 }),
-      roof: new THREE.MeshStandardMaterial({ color: dungeon ? 0x4a3a2a : 0x2f6f6a, roughness: 0.85 }),
-      roofGold: new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.4, metalness: 0.7 }),
-      stone: new THREE.MeshStandardMaterial({ color: dungeon ? 0x5a4a3a : 0xcfc0a0, roughness: 1 }),
-      stoneDark: new THREE.MeshStandardMaterial({ color: dungeon ? 0x3a2f26 : 0x8a7a5f, roughness: 1 }),
-      wood: new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 1 }),
-      crimson: new THREE.MeshStandardMaterial({ color: 0xa02030, roughness: 0.85 }),
-      gold: new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.4, metalness: 0.7 }),
-      jade: new THREE.MeshStandardMaterial({ color: 0x2e8b74, roughness: 0.8 }),
-      leaf: new THREE.MeshStandardMaterial({ color: 0x4a8a5a, roughness: 0.9 }),
-      trunk: new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 1 }),
+      wall: organicMaterial({ color: dungeon ? 0x6a5a48 : 0xe8dcc0, roughness: 0.9, rimStrength: 0.16 }),
+      roof: organicMaterial({ color: dungeon ? 0x4a3a2a : 0x2f6f6a, roughness: 0.85, rimStrength: 0.2 }),
+      roofGold: organicMaterial({ color: 0xd4af37, roughness: 0.4, metalness: 0.7, rimStrength: 0.3 }),
+      stone: organicMaterial({ color: dungeon ? 0x5a4a3a : 0xcfc0a0, roughness: 1, rimStrength: 0.14 }),
+      stoneDark: organicMaterial({ color: dungeon ? 0x3a2f26 : 0x8a7a5f, roughness: 1, rimStrength: 0.14 }),
+      wood: organicMaterial({ color: 0x6b4a2f, roughness: 1, rimStrength: 0.15 }),
+      crimson: organicMaterial({ color: 0xa02030, roughness: 0.85, rimStrength: 0.2 }),
+      gold: organicMaterial({ color: 0xd4af37, roughness: 0.4, metalness: 0.7, rimStrength: 0.3 }),
+      jade: organicMaterial({ color: 0x2e8b74, roughness: 0.8, rimStrength: 0.2 }),
+      leaf: organicMaterial({ color: 0x4a8a5a, roughness: 0.9, rimStrength: 0.3, side: THREE.DoubleSide }),
+      trunk: organicMaterial({ color: 0x6b4a2f, roughness: 1, rimStrength: 0.15 }),
       water: new THREE.MeshStandardMaterial({
         color: 0x3fa8d8, roughness: 0.2, metalness: 0.1, emissive: 0x1a6a9a, emissiveIntensity: 0.6,
       }),
@@ -1071,43 +1870,54 @@ export class WorldView {
   }
 
   /**
-   * Asian roof in layers: eave trim + two stacked 4-sided pyramid tiers +
-   * gold ridge. The 4-sided cone is a square pyramid; rotated 45° its sides
-   * align to the axes, so scale.x/z = w|d * 0.82 covers w|d with overhang
-   * (half-side of the unit pyramid is 1/sqrt(2) ~= 0.707).
+   * Asian roof in layers: eave trim + two stacked curved-slope tiers
+   * (asianRoofGeo from procedural.ts — 4 águas côncavas com beirais
+   * levantados, nunca pirâmide lisa) + gold ridge beam.
    */
   private asianRoof(mats: ZoneMats, w: number, d: number, y: number, tierH = 1.1): THREE.Group {
     const g = new THREE.Group();
-    const trim = new THREE.Mesh(new THREE.BoxGeometry(w * 1.15, 0.1, d * 1.15), mats.roofGold);
+    const trim = new THREE.Mesh(chamferedBoxGeo(w * 1.15, 0.1, d * 1.15, 0.03), mats.roofGold);
     trim.position.y = y + 0.05;
-    const tier1 = new THREE.Mesh(new THREE.ConeGeometry(1, tierH, 4), mats.roof);
-    tier1.scale.set(w * 0.82, 1, d * 0.82);
-    tier1.rotation.y = Math.PI / 4;
-    tier1.position.y = y + 0.1 + tierH / 2;
-    const tier2 = new THREE.Mesh(new THREE.ConeGeometry(1, tierH * 0.8, 4), mats.roof);
-    tier2.scale.set(w * 0.45, 1, d * 0.45);
-    tier2.rotation.y = Math.PI / 4;
-    tier2.position.y = y + 0.1 + tierH + (tierH * 0.8) / 2;
-    const ridge = new THREE.Mesh(new THREE.BoxGeometry(w * 0.45, 0.12, 0.14), mats.roofGold);
+    const tier1 = new THREE.Mesh(asianRoofGeo(w, d, tierH, 0.35, 0.28), mats.roof);
+    tier1.position.y = y + 0.1;
+    const tier2 = new THREE.Mesh(asianRoofGeo(w * 0.55, d * 0.55, tierH * 0.8, 0.2, 0.2), mats.roof);
+    tier2.position.y = y + 0.1 + tierH;
+    const ridge = new THREE.Mesh(ridgeBeamGeo(Math.max(w, d) * 0.45), mats.roofGold);
     ridge.position.y = y + 0.1 + tierH * 1.8 + 0.05;
+    if (d > w) ridge.rotation.y = Math.PI / 2;
     g.add(trim, tier1, tier2, ridge);
     return g;
   }
 
-  /** One house: plaster walls + layered Asian roof, facing the plaza. */
-  private asianBuilding(mats: ZoneMats, w: number, h: number, d: number, x: number, z: number): void {
+  /** One house: chamfered plaster walls + layered curved roof, facing the plaza.
+   * Returns the group (tagged sceneryKey "house" for the GLB swap). */
+  private asianBuilding(mats: ZoneMats, w: number, h: number, d: number, x: number, z: number): THREE.Group {
     const y = this.terrainHeight(x, z);
     const g = new THREE.Group();
-    const walls = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mats.wall);
+    const walls = new THREE.Mesh(chamferedBoxGeo(w, h, d, 0.09), mats.wall);
     walls.position.y = h / 2;
-    const door = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.9, 0.12), mats.wood);
+    const door = new THREE.Mesh(chamferedBoxGeo(1.1, 1.9, 0.12, 0.04), mats.wood);
     door.position.set(0, 0.95, d / 2 + 0.02);
     const roof = this.asianRoof(mats, w, d, h);
     g.add(walls, door, roof);
-    // Face the plaza (forward -Z rotated by atan2(x, z) points at origin).
+    // Face the plaza: the door is on the +Z face, so +Z must point at the
+    // origin — rotation.y = atan2(-x, -z). (The old atan2(x, z) pointed
+    // the +Z face away from the plaza: houses showed their backs.)
     g.position.set(x, y, z);
-    g.rotation.y = Math.atan2(x, z);
+    g.rotation.y = Math.atan2(-x, -z);
+    g.userData.sceneryKey = "house";
     this.scene.add(g);
+    return g;
+  }
+
+  /** Add an object to the scene, optionally tagged as a scenery placeholder
+   *  (removed when the matching GLB template loads — see applySceneryGlb). */
+  private addScenery(obj: THREE.Object3D, key?: string): void {
+    if (key) {
+      obj.userData.sceneryKey = key;
+      this.sceneryPlaceholders.push(obj);
+    }
+    this.scene.add(obj);
   }
 
   /** Central lotus fountain: basin + rim + glowing blue water + lotus column.
@@ -1118,23 +1928,25 @@ export class WorldView {
     const fz = -7;
     const y = this.terrainHeight(fx, fz);
     const g = new THREE.Group();
-    const basin = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.5, 0.7, 24), mats.stone);
-    basin.position.y = 0.35;
-    const rim = new THREE.Mesh(new THREE.TorusGeometry(3.2, 0.18, 8, 32), mats.stoneDark);
-    rim.rotation.x = Math.PI / 2;
-    rim.position.y = 0.7;
-    const water = new THREE.Mesh(new THREE.CircleGeometry(2.9, 24), mats.water);
-    water.rotation.x = -Math.PI / 2;
+    // Basin: one lathe profile (outer wall + rim + inner wall), no cylinder.
+    const basin = new THREE.Mesh(fountainBasinGeo(3.2, 0.7), mats.stone);
+    const rim = new THREE.Mesh(portalRingGeo(3.2, 0.16), mats.stoneDark);
+    rim.position.y = 0.68;
+    const water = new THREE.Mesh(latheProfile([[0, 0], [2.9, 0]], 24), mats.water);
     water.position.y = 0.62;
-    const column = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 2.2, 10), mats.stone);
-    column.position.y = 1.7;
-    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.3, 12, 10), mats.water);
+    const column = new THREE.Mesh(fountainColumnGeo(2.2, 0.4), mats.stone);
+    column.position.y = 0.6;
+    const orb = new THREE.Mesh(
+      latheProfile([[0, -0.3], [0.28, -0.15], [0.3, 0], [0.28, 0.15], [0, 0.3]], 12),
+      mats.water,
+    );
     orb.position.y = 2.95;
     g.add(basin, rim, water, column, orb);
-    // Lotus petals around the column top (6 meshes, shared petal material).
+    // Lotus petals around the column top (6 lathe buds, shared petal material).
+    const petalGeo = latheProfile([[0, 0], [0.16, 0.1], [0.22, 0.3], [0.12, 0.5], [0, 0.55]], 8);
     for (let i = 0; i < 6; i += 1) {
       const a = (i / 6) * Math.PI * 2;
-      const petal = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.55, 6), mats.petal);
+      const petal = new THREE.Mesh(petalGeo, mats.petal);
       petal.position.set(Math.cos(a) * 0.55, 2.5, Math.sin(a) * 0.55);
       petal.rotation.z = Math.cos(a) * 0.9;
       petal.rotation.x = -Math.sin(a) * 0.9;
@@ -1155,51 +1967,50 @@ export class WorldView {
       [10, 0.4, 7, 1.0],
     ];
     for (const [w, h, d, py] of steps) {
-      const s = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mats.stone);
+      const s = new THREE.Mesh(chamferedBoxGeo(w, h, d, 0.06), mats.stone);
       s.position.set(0, py, 0);
       g.add(s);
     }
-    const floor = new THREE.Mesh(new THREE.BoxGeometry(9, 0.3, 6), mats.stone);
+    const floor = new THREE.Mesh(chamferedBoxGeo(9, 0.3, 6, 0.06), mats.stone);
     floor.position.set(0, 1.35, 0);
-    const back = new THREE.Mesh(new THREE.BoxGeometry(9, 4.5, 0.6), mats.wall);
+    const back = new THREE.Mesh(chamferedBoxGeo(9, 4.5, 0.6, 0.08), mats.wall);
     back.position.set(0, 3.75, -2.8);
-    const door = new THREE.Mesh(new THREE.BoxGeometry(2, 3, 0.12), mats.wood);
+    const door = new THREE.Mesh(chamferedBoxGeo(2, 3, 0.12, 0.04), mats.wood);
     door.position.set(0, 3.0, -2.45);
-    // Triangular pediment: 4-sided cone squashed flat in z, gold-trimmed.
-    const pediment = new THREE.Mesh(new THREE.ConeGeometry(3.2, 1.5, 4), mats.roof);
-    pediment.scale.set(1.25, 1, 0.22);
-    pediment.rotation.y = Math.PI / 4;
-    pediment.position.set(0, 6.7, 2.6);
+    // Triangular pediment: chamfered extruded triangle, gold-trimmed.
+    const pediment = new THREE.Mesh(pedimentGeo(8, 1.5, 0.5), mats.roof);
+    pediment.position.set(0, 5.95, 2.35);
     const roof = this.asianRoof(mats, 11, 8, 6.0, 1.4);
     g.add(floor, back, door, pediment, roof);
-    // 6 front columns (one InstancedMesh).
+    // 6 front columns: sculpted gothic pillars (one InstancedMesh).
     const cols: InstancedItem[] = [];
-    for (let i = 0; i < 6; i += 1) cols.push({ x: -3.75 + i * 1.5, y: 3.6, z: 2.6 });
-    g.add(makeInstanced(new THREE.CylinderGeometry(0.35, 0.4, 4.2, 10), mats.stone, cols));
+    for (let i = 0; i < 6; i += 1) cols.push({ x: -3.75 + i * 1.5, y: 1.5, z: 2.6 });
+    g.add(makeInstanced(gothicPillar(0.35, 4.2, 14), mats.stone, cols));
     g.position.set(0, y, cz);
-    this.scene.add(g);
+    this.addScenery(g, "temple");
   }
 
   /** Market stall: 4 posts, striped crimson/gold awning, counter + goods. */
   private marketStall(mats: ZoneMats, x: number, z: number, ry: number): void {
     const y = this.terrainHeight(x, z);
     const g = new THREE.Group();
-    const postGeo = new THREE.CylinderGeometry(0.07, 0.09, 2.3, 6);
+    // Posts: tapered lathe (never bare cylinders).
+    const postGeo = lanternPostGeo(2.3);
     for (const [px, pz] of [[-1.6, -1.3], [1.6, -1.3], [-1.6, 1.3], [1.6, 1.3]] as const) {
       const post = new THREE.Mesh(postGeo, mats.wood);
-      post.position.set(px, 1.15, pz);
+      post.position.set(px, 0, pz);
       g.add(post);
     }
-    // Awning: 5 alternating stripes across the width (crimson/gold).
+    // Awning: 5 alternating chamfered stripes across the width (crimson/gold).
     for (let i = 0; i < 5; i += 1) {
       const stripe = new THREE.Mesh(
-        new THREE.BoxGeometry(0.74, 0.08, 3.1),
+        chamferedBoxGeo(0.74, 0.08, 3.1, 0.02),
         i % 2 === 0 ? mats.crimson : mats.gold,
       );
       stripe.position.set(-1.48 + i * 0.74, 2.35, 0);
       g.add(stripe);
     }
-    const counter = new THREE.Mesh(new THREE.BoxGeometry(3, 0.9, 1.2), mats.wood);
+    const counter = new THREE.Mesh(chamferedBoxGeo(3, 0.9, 1.2, 0.05), mats.wood);
     counter.position.set(0, 0.45, 0.4);
     const goods: Array<[number, number, THREE.Material]> = [
       [-0.9, 1.05, mats.jade],
@@ -1207,13 +2018,16 @@ export class WorldView {
       [0.9, 1.05, mats.crimson],
     ];
     for (const [gx, gy, gm] of goods) {
-      const box = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.5), gm);
+      const box = new THREE.Mesh(chamferedBoxGeo(0.5, 0.3, 0.5, 0.04), gm);
       box.position.set(gx, gy, 0.4);
       g.add(box);
     }
     g.add(counter);
     g.position.set(x, y, z);
     g.rotation.y = ry;
+    g.userData.sceneryKey = "stall";
+    this.sceneryPlaceholders.push(g);
+    this.stallPlacements.push({ x, z, ry });
     this.scene.add(g);
   }
 
@@ -1234,14 +2048,22 @@ export class WorldView {
       const a = (deg * Math.PI) / 180;
       const x = Math.cos(a) * 20;
       const z = Math.sin(a) * 20;
-      this.asianBuilding(mats, 4.5 + rng() * 2, 3 + rng() * 1.5, 3.6 + rng() * 1.2, x, z);
+      const w = 4.5 + rng() * 2;
+      const h = 3 + rng() * 1.5;
+      const d = 3.6 + rng() * 1.2;
+      this.asianBuilding(mats, w, h, d, x, z);
+      // GLB house template is 5 m tall: uniform scale matches the height.
+      // ry matches asianBuilding: the door (+Z face) points at the plaza.
+      this.housePlacements.push({ x, z, ry: Math.atan2(-x, -z), s: h / 5 });
     }
     this.buildTemple(mats);
-    // Market stalls on the four diagonals (between the houses, off the streets).
-    this.marketStall(mats, 12, 12, Math.PI / 4);
-    this.marketStall(mats, -12, 12, -Math.PI / 4);
-    this.marketStall(mats, 12, -12, (3 * Math.PI) / 4);
-    this.marketStall(mats, -12, -12, -(3 * Math.PI) / 4);
+    // Market stalls on the four diagonals (between the houses, off the
+    // streets). The counter/goods are on the +Z face, so ry = atan2(-x, -z)
+    // turns the front toward the plaza (the old values faced outward).
+    this.marketStall(mats, 12, 12, (-3 * Math.PI) / 4);
+    this.marketStall(mats, -12, 12, (3 * Math.PI) / 4);
+    this.marketStall(mats, 12, -12, -Math.PI / 4);
+    this.marketStall(mats, -12, -12, Math.PI / 4);
     // Jade wall: instanced segments around r = 44, gaps at the east/west gates.
     const wallItems: InstancedItem[] = [];
     for (let i = 0; i < 30; i += 1) {
@@ -1250,45 +2072,55 @@ export class WorldView {
       if (Math.min(Math.abs(deg), Math.abs(deg - 180)) < 12) continue; // gate gaps
       wallItems.push({ x: Math.cos(a) * 44, y: 1.6, z: Math.sin(a) * 44, ry: -a - Math.PI / 2 });
     }
-    this.scene.add(makeInstanced(new THREE.BoxGeometry(4.6, 3.2, 1.1), mats.jade, wallItems));
+    this.addScenery(makeInstanced(chamferedBoxGeo(4.6, 3.2, 1.1, 0.08), mats.jade, wallItems));
     // Gate towers flanking each gate (4 towers, 2 meshes each).
     for (const [gx, gz] of [[44, -3.5], [44, 3.5], [-44, -3.5], [-44, 3.5]] as const) {
       const gy = this.terrainHeight(gx, gz);
-      const tower = new THREE.Mesh(new THREE.BoxGeometry(2.5, 6.5, 2.5), mats.stone);
+      const tower = new THREE.Mesh(chamferedBoxGeo(2.5, 6.5, 2.5, 0.1), mats.stone);
       tower.position.set(gx, gy + 3.25, gz);
-      const cap = new THREE.Mesh(new THREE.ConeGeometry(2.2, 1.4, 4), mats.roof);
-      cap.rotation.y = Math.PI / 4;
-      cap.position.set(gx, gy + 7.2, gz);
+      const cap = new THREE.Mesh(asianRoofGeo(2.5, 2.5, 1.4, 0.3, 0.25), mats.roof);
+      cap.position.set(gx, gy + 6.5, gz);
       this.scene.add(tower, cap);
     }
-    // Trees lining the streets (24, instanced trunk + two-tier canopy so
-    // they read as trees instead of single cones).
+    // Palms lining the streets (24): lathe trunk + instanced frond fan +
+    // date cluster — never cones. One draw call per part (3 total).
     const treePos: Array<[number, number]> = [];
     for (const s of [-28, -20, -12, 12, 20, 28]) {
       treePos.push([6.5, s], [-6.5, s], [s, 6.5], [s, -6.5]);
     }
-    this.scene.add(
+    const prng = sfc32(20261116);
+    const trunkItems: InstancedItem[] = [];
+    const frondItems: InstancedItem[] = [];
+    const dateItems: InstancedItem[] = [];
+    for (const [x, z] of treePos) {
+      const ty = this.terrainHeight(x, z);
+      const lean = (prng() - 0.5) * 0.24;
+      const leanDir = prng() * Math.PI * 2;
+      const s = 0.9 + prng() * 0.25;
+      this.palmPlacements.push({ x, y: ty, z, ry: leanDir, s });
+      trunkItems.push({ x, y: ty, z, rz: lean, s });
+      dateItems.push({ x, y: ty + 2.5 * s, z });
+      for (let k = 0; k < 9; k += 1) {
+        frondItems.push({
+          x,
+          y: ty + 2.55 * s,
+          z,
+          ry: (k / 9) * Math.PI * 2 + leanDir,
+          s: s * (0.9 + prng() * 0.2),
+        });
+      }
+    }
+    this.addScenery(makeInstanced(palmTrunkGeo(2.6, 0.22, 12), mats.trunk, trunkItems), "palm");
+    this.addScenery(makeInstanced(palmFrondGeo(2.2, 0.42), mats.leaf, frondItems), "palm");
+    this.addScenery(
       makeInstanced(
-        new THREE.CylinderGeometry(0.18, 0.28, 2.6, 6),
-        mats.trunk,
-        treePos.map(([x, z]) => ({ x, y: this.terrainHeight(x, z) + 1.3, z })),
+        latheProfile([[0, -0.2], [0.2, -0.1], [0.22, 0.05], [0.12, 0.2], [0, 0.22]], 8),
+        mats.wood,
+        dateItems,
       ),
+      "palm",
     );
-    this.scene.add(
-      makeInstanced(
-        new THREE.ConeGeometry(1.6, 2.4, 8),
-        mats.leaf,
-        treePos.map(([x, z]) => ({ x, y: this.terrainHeight(x, z) + 3.6, z })),
-      ),
-    );
-    this.scene.add(
-      makeInstanced(
-        new THREE.ConeGeometry(1.0, 1.6, 8),
-        mats.leaf,
-        treePos.map(([x, z]) => ({ x, y: this.terrainHeight(x, z) + 5.0, z })),
-      ),
-    );
-    // Lanterns along both streets (26, instanced post + small glowing box + cap).
+    // Lanterns along both streets (26, instanced lathe post + lathe body + mini roof).
     // s = 0 is skipped on the north/south street rows: a lantern at (0, ±3.4)
     // sits exactly on the spawn -> camera sightline and hides the hero.
     const lampPos: Array<[number, number]> = [];
@@ -1298,23 +2130,23 @@ export class WorldView {
     }
     this.scene.add(
       makeInstanced(
-        new THREE.CylinderGeometry(0.05, 0.07, 2.4, 6),
+        lanternPostGeo(2.4),
         mats.wood,
-        lampPos.map(([x, z]) => ({ x, y: this.terrainHeight(x, z) + 1.2, z })),
+        lampPos.map(([x, z]) => ({ x, y: this.terrainHeight(x, z), z })),
       ),
     );
     this.scene.add(
       makeInstanced(
-        new THREE.BoxGeometry(0.32, 0.4, 0.32),
+        lanternBodyGeo(),
         mats.lanternGlow,
-        lampPos.map(([x, z]) => ({ x, y: this.terrainHeight(x, z) + 2.5, z })),
+        lampPos.map(([x, z]) => ({ x, y: this.terrainHeight(x, z) + 2.3, z })),
       ),
     );
     this.scene.add(
       makeInstanced(
-        new THREE.ConeGeometry(0.28, 0.22, 4),
+        asianRoofGeo(0.45, 0.45, 0.18, 0.08, 0.06, 6),
         mats.roofGold,
-        lampPos.map(([x, z]) => ({ x, y: this.terrainHeight(x, z) + 2.8, z, ry: Math.PI / 4 })),
+        lampPos.map(([x, z]) => ({ x, y: this.terrainHeight(x, z) + 2.72, z })),
       ),
     );
     // Cheap sky: 6 flat translucent cloud blobs high above the city.
@@ -1330,7 +2162,7 @@ export class WorldView {
         sz: 2.5 + crng() * 2,
       });
     }
-    this.scene.add(makeInstanced(new THREE.SphereGeometry(1, 10, 8), mats.cloud, clouds));
+    this.scene.add(makeInstanced(organicCloudGeo(20261112), mats.cloud, clouds));
     // Rocks near the wall (6, instanced).
     const rocks: InstancedItem[] = [];
     const rrng = sfc32(20261113);
@@ -1345,7 +2177,7 @@ export class WorldView {
         s: 0.6 + rrng() * 0.9,
       });
     }
-    this.scene.add(makeInstanced(new THREE.DodecahedronGeometry(0.7, 0), mats.stoneDark, rocks));
+    this.scene.add(makeInstanced(organicRockGeo(0.7, 5, 0.45), mats.stoneDark, rocks));
   }
 
   /**
@@ -1361,14 +2193,12 @@ export class WorldView {
     const ox = 20;
     const oz = 16;
     const oy = this.terrainHeight(ox, oz);
-    const water = new THREE.Mesh(new THREE.CircleGeometry(6, 28), mats.water);
-    water.rotation.x = -Math.PI / 2;
+    const water = new THREE.Mesh(latheProfile([[0, 0], [6, 0]], 28), mats.water);
     water.position.set(ox, oy + 0.15, oz);
     const sand = new THREE.Mesh(
-      new THREE.RingGeometry(6, 7.5, 28),
+      latheProfile([[6, 0], [7.5, 0]], 28),
       new THREE.MeshStandardMaterial({ color: 0xecd29b, roughness: 1 }),
     );
-    sand.rotation.x = -Math.PI / 2;
     sand.position.set(ox, oy + 0.08, oz);
     this.scene.add(water, sand);
     const palmPos: Array<[number, number]> = [];
@@ -1380,36 +2210,38 @@ export class WorldView {
     for (let i = 0; i < 4; i += 1) {
       palmPos.push([(rng() * 2 - 1) * 45, (rng() * 2 - 1) * 45]);
     }
-    this.scene.add(
-      makeInstanced(
-        new THREE.CylinderGeometry(0.18, 0.28, 2.6, 6),
-        mats.trunk,
-        palmPos.map(([x, z]) => ({
+    // Procedural palms (same kit as the city): lathe trunk + frond fan.
+    const duneTrunks: InstancedItem[] = [];
+    const duneFronds: InstancedItem[] = [];
+    for (const [x, z] of palmPos) {
+      const ty = this.terrainHeight(x, z);
+      const leanDir = rng() * Math.PI * 2;
+      const s = 0.95 + rng() * 0.3;
+      this.palmPlacements.push({ x, y: ty, z, ry: leanDir, s });
+      duneTrunks.push({ x, y: ty, z, rz: (rng() - 0.5) * 0.3, s });
+      for (let k = 0; k < 9; k += 1) {
+        duneFronds.push({
           x,
-          y: this.terrainHeight(x, z) + 1.3,
+          y: ty + 2.55 * s,
           z,
-          rz: (rng() - 0.5) * 0.3,
-        })),
-      ),
-    );
-    this.scene.add(
-      makeInstanced(
-        new THREE.ConeGeometry(1.5, 1.4, 8),
-        mats.leaf,
-        palmPos.map(([x, z]) => ({ x, y: this.terrainHeight(x, z) + 3.0, z })),
-      ),
-    );
+          ry: (k / 9) * Math.PI * 2 + leanDir,
+          s: s * (0.9 + rng() * 0.2),
+        });
+      }
+    }
+    this.addScenery(makeInstanced(palmTrunkGeo(2.6, 0.22, 12), mats.trunk, duneTrunks), "palm");
+    this.addScenery(makeInstanced(palmFrondGeo(2.2, 0.42), mats.leaf, duneFronds), "palm");
     // Ruined arch + broken columns at (-22, -18).
     const ax = -22;
     const az = -18;
     const ay = this.terrainHeight(ax, az);
-    const pillarGeo = new THREE.BoxGeometry(1, 5, 1);
+    const pillarGeo = chamferedBoxGeo(1, 5, 1, 0.08);
     for (const dx of [-2.5, 2.5]) {
       const p = new THREE.Mesh(pillarGeo, mats.stone);
       p.position.set(ax + dx, ay + 2.5, az);
       this.scene.add(p);
     }
-    const lintel = new THREE.Mesh(new THREE.BoxGeometry(6.5, 1, 1.2), mats.stone);
+    const lintel = new THREE.Mesh(chamferedBoxGeo(6.5, 1, 1.2, 0.08), mats.stone);
     lintel.position.set(ax, ay + 5.4, az);
     this.scene.add(lintel);
     const broken: InstancedItem[] = [];
@@ -1418,13 +2250,13 @@ export class WorldView {
       const bz = az + 4 + rng() * 8;
       broken.push({
         x: bx,
-        y: this.terrainHeight(bx, bz) + 0.4 + rng() * 0.8,
+        y: this.terrainHeight(bx, bz) + rng() * 0.4,
         z: bz,
         rz: (rng() - 0.5) * 0.25,
         sy: 0.4 + rng() * 0.8,
       });
     }
-    this.scene.add(makeInstanced(new THREE.CylinderGeometry(0.4, 0.45, 1.8, 8), mats.stone, broken));
+    this.scene.add(makeInstanced(gothicPillar(0.4, 1.8, 10), mats.stone, broken));
     // Rocks (24) and cacti (10), off the paths.
     const rocks: InstancedItem[] = [];
     let guard = 0;
@@ -1436,7 +2268,7 @@ export class WorldView {
       if (Math.hypot(x - ox, z - oz) < 11) continue;
       rocks.push({ x, y: this.terrainHeight(x, z) + 0.3, z, ry: rng() * Math.PI, s: 0.5 + rng() * 1.2 });
     }
-    this.scene.add(makeInstanced(new THREE.DodecahedronGeometry(0.7, 0), mats.stoneDark, rocks));
+    this.scene.add(makeInstanced(organicRockGeo(0.7, 7, 0.45), mats.stoneDark, rocks));
     const cacti: InstancedItem[] = [];
     guard = 0;
     while (cacti.length < 10 && guard < 200) {
@@ -1445,16 +2277,10 @@ export class WorldView {
       const z = (rng() * 2 - 1) * 50;
       if (!clearOfPaths(x, z, 0)) continue;
       if (Math.hypot(x - ox, z - oz) < 11) continue;
-      cacti.push({ x, y: this.terrainHeight(x, z) + 0.9, z, sy: 0.8 + rng() * 0.6 });
+      cacti.push({ x, y: this.terrainHeight(x, z), z, ry: rng() * Math.PI, sy: 0.8 + rng() * 0.6 });
     }
-    this.scene.add(makeInstanced(new THREE.CylinderGeometry(0.25, 0.3, 1.8, 8), mats.leaf, cacti));
-    this.scene.add(
-      makeInstanced(
-        new THREE.SphereGeometry(0.25, 8, 6),
-        mats.leaf,
-        cacti.map((c) => ({ x: c.x, y: c.y + 0.9 * (c.sy ?? 1), z: c.z })),
-      ),
-    );
+    // Cactus: lathe body + arms merged (cactusGeo), never cylinder + sphere.
+    this.scene.add(makeInstanced(cactusGeo(1.8, 3), mats.leaf, cacti));
   }
 
   /**
@@ -1475,34 +2301,34 @@ export class WorldView {
       wallItems.push({ x: -half, y: 2.5, z: s + 2.3, ry: Math.PI / 2 });
       wallItems.push({ x: half, y: 2.5, z: s + 2.3, ry: Math.PI / 2 });
     }
-    this.scene.add(makeInstanced(new THREE.BoxGeometry(4.6, 5, 1.2), mats.stoneDark, wallItems));
-    // Two rows of pillars (12) + capitals (instanced).
+    this.scene.add(makeInstanced(chamferedBoxGeo(4.6, 5, 1.2, 0.08), mats.stoneDark, wallItems));
+    // Two rows of sculpted pillars (12) + capitals (instanced).
     const pillars: InstancedItem[] = [];
     for (const px of [-12, 12]) {
-      for (let z = -30; z <= 30; z += 12) pillars.push({ x: px, y: 2.5, z });
+      for (let z = -30; z <= 30; z += 12) pillars.push({ x: px, y: 0, z });
     }
-    this.scene.add(makeInstanced(new THREE.CylinderGeometry(0.6, 0.7, 5, 10), mats.stone, pillars));
+    this.scene.add(makeInstanced(gothicPillar(0.6, 5, 12), mats.stone, pillars));
     this.scene.add(
       makeInstanced(
-        new THREE.BoxGeometry(1.6, 0.4, 1.6),
+        capitalGeo(1.6, 0.4),
         mats.stoneDark,
         pillars.map((p) => ({ x: p.x, y: 5.2, z: p.z })),
       ),
     );
-    // Torches on 4 pillars: holder + emissive flame + 4 PointLights (max).
+    // Torches on 4 pillars: lathe holder + lathe flame + 4 PointLights (max).
     const torchPos: Array<[number, number]> = [[-12, -18], [12, -18], [-12, 18], [12, 18]];
     this.scene.add(
       makeInstanced(
-        new THREE.CylinderGeometry(0.08, 0.08, 0.7, 6),
+        lanternPostGeo(0.7),
         mats.wood,
-        torchPos.map(([x, z]) => ({ x: x + 0.8, y: 3.4, z })),
+        torchPos.map(([x, z]) => ({ x: x + 0.8, y: 3.05, z })),
       ),
     );
     this.scene.add(
       makeInstanced(
-        new THREE.ConeGeometry(0.22, 0.6, 8),
+        latheProfile([[0, 0], [0.16, 0.08], [0.22, 0.25], [0.12, 0.45], [0, 0.6]], 8),
         mats.flame,
-        torchPos.map(([x, z]) => ({ x: x + 0.8, y: 3.9, z })),
+        torchPos.map(([x, z]) => ({ x: x + 0.8, y: 3.6, z })),
       ),
     );
     for (const [x, z] of torchPos) {
@@ -1512,11 +2338,11 @@ export class WorldView {
     }
     // Altar at the far (north) end + crimson boss ring on the floor.
     const az = -32;
-    const step1 = new THREE.Mesh(new THREE.BoxGeometry(10, 0.4, 6), mats.stone);
+    const step1 = new THREE.Mesh(chamferedBoxGeo(10, 0.4, 6, 0.05), mats.stone);
     step1.position.set(0, 0.2, az);
-    const step2 = new THREE.Mesh(new THREE.BoxGeometry(8, 0.4, 4.5), mats.stone);
+    const step2 = new THREE.Mesh(chamferedBoxGeo(8, 0.4, 4.5, 0.05), mats.stone);
     step2.position.set(0, 0.6, az);
-    const altar = new THREE.Mesh(new THREE.BoxGeometry(3, 1.2, 1.5), isTemplo ? mats.gold : mats.stoneDark);
+    const altar = new THREE.Mesh(chamferedBoxGeo(3, 1.2, 1.5, 0.07), isTemplo ? mats.gold : mats.stoneDark);
     altar.position.set(0, 1.4, az);
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(3.5, 4.2, 32),
@@ -1529,13 +2355,13 @@ export class WorldView {
       // Tumbas: 4 sarcophagi along the side walls.
       this.scene.add(
         makeInstanced(
-          new THREE.BoxGeometry(2, 1, 1),
+          sarcophagusGeo(2, 1, 1),
           mats.stone,
           [
-            { x: -30, y: 0.5, z: -10 },
-            { x: -30, y: 0.5, z: 10 },
-            { x: 30, y: 0.5, z: -10 },
-            { x: 30, y: 0.5, z: 10 },
+            { x: -30, y: 0, z: -10 },
+            { x: -30, y: 0, z: 10 },
+            { x: 30, y: 0, z: -10 },
+            { x: 30, y: 0, z: 10 },
           ],
         ),
       );
@@ -1552,7 +2378,7 @@ export class WorldView {
         s: 0.4 + rng() * 0.7,
       });
     }
-    this.scene.add(makeInstanced(new THREE.DodecahedronGeometry(0.7, 0), mats.stoneDark, rubble));
+    this.scene.add(makeInstanced(organicRockGeo(0.7, 11, 0.45), mats.stoneDark, rubble));
   }
 
   private buildProps(): void {
@@ -1565,18 +2391,18 @@ export class WorldView {
       this.buildDunes(mats);
     }
     // City NPC markers + portals from the zone data (fixed positions).
-    // NPCs read as robed figures (cone robe + head), not green capsules.
+    // NPCs read as robed figures (lathe robe + lathe head), not green capsules.
     for (const npc of this.activeZone.npcs ?? []) {
       const [nx, , nz] = WORLD_TO_THREE(npc.x, npc.y);
       const ny = this.terrainHeight(nx, nz);
       const robe = new THREE.Mesh(
-        new THREE.ConeGeometry(0.45, 1.5, 8),
-        new THREE.MeshStandardMaterial({ color: 0x2e8b74, roughness: 0.7 }),
+        npcRobeGeo(),
+        organicMaterial({ color: 0x2e8b74, roughness: 0.7, rimStrength: 0.25 }),
       );
-      robe.position.set(nx, ny + 0.75, nz);
+      robe.position.set(nx, ny, nz);
       const head = new THREE.Mesh(
-        new THREE.SphereGeometry(0.22, 10, 8),
-        new THREE.MeshStandardMaterial({ color: 0xf2d6c2, roughness: 0.5 }),
+        latheProfile([[0, -0.22], [0.2, -0.1], [0.22, 0], [0.2, 0.1], [0, 0.22]], 10),
+        organicMaterial({ color: 0xf2d6c2, roughness: 0.5, rimStrength: 0.3 }),
       );
       head.position.set(nx, ny + 1.65, nz);
       const halo = new THREE.Mesh(
@@ -1591,7 +2417,7 @@ export class WorldView {
       const [px, , pz] = WORLD_TO_THREE(portal.x, portal.y);
       const py = this.terrainHeight(px, pz);
       const gate = new THREE.Mesh(
-        new THREE.TorusGeometry(1.8, 0.18, 10, 28),
+        portalRingGeo(1.8, 0.18),
         new THREE.MeshBasicMaterial({ color: 0x66d8ff, transparent: true, opacity: 0.7 }),
       );
       gate.position.set(px, py + 2, pz);
@@ -1662,9 +2488,9 @@ export class WorldView {
     rig: GlbRig;
   } | null {
     const isMale = opts.gender === "m";
-    // Male players use the real male mesh (A-posed in Blender, no rig —
-    // whole-body procedural animation); until it loads, the female GLB
-    // is the fallback so no player is ever a capsule.
+    // Male players use the rigged male mesh (DEF rig transferred from
+    // the female, same procedural bone animation); until it loads, the
+    // female GLB is the fallback so no player is ever a capsule.
     const template = isMale ? (this.glbTemplateM ?? this.glbTemplate) : this.glbTemplate;
     if (!template) return null;
     const inner = cloneSkinned(template) as THREE.Group;
@@ -1682,8 +2508,11 @@ export class WorldView {
     const baseColors: THREE.Color[] = [];
     inner.traverse((o) => {
       if (o instanceof THREE.Bone && o.name.startsWith("DEF-")) {
-        bones.set(o.name, o);
-        baseQuat.set(o.name, o.quaternion.clone());
+        // Loaded names are sanitized by GLTFLoader (dots stripped) — map
+        // back to the canonical dotted name so pose targets match.
+        const canonical = glbCanonicalBoneName(o.name);
+        bones.set(canonical, o);
+        baseQuat.set(canonical, o.quaternion.clone());
       }
       if (o instanceof THREE.Mesh) {
         o.frustumCulled = false;
@@ -1717,8 +2546,8 @@ export class WorldView {
       forearmL: bones.get("DEF-forearm.L") ?? null,
       phase: 0,
       lastT: performance.now(),
-      // Unrigged male mesh: no DEF bones — animateGlbRig drives the
-      // whole inner group instead (sway/lean/lunge).
+      // Unrigged template fallback: no DEF bones — animateGlbRig drives
+      // the whole inner group instead (sway/lean/lunge).
       staticRoot: bones.size === 0 ? inner : null,
     };
     if (opts.armor) this.applyArmorTint(rig, opts.armor);
@@ -1803,8 +2632,8 @@ export class WorldView {
   }
 
   /**
-   * Load the male GLB template (warrior_m_r64_final_apose.glb, static
-   * mesh, no rig). Same caching/rebuild behavior as loadGlbCharacter;
+   * Load the male GLB template (warrior_m_r64_final_rigged.glb, 34-bone
+   * DEF rig). Same caching/rebuild behavior as loadGlbCharacter;
    * male players fall back to the female GLB until this arrives.
    */
   async loadGlbMaleCharacter(url: string): Promise<boolean> {
@@ -1840,6 +2669,94 @@ export class WorldView {
   }
 
   /**
+   * Scenery GLBs (rodada 3): temple/house/stall templates gerados no
+   * ComfyUI (TRELLIS2), carregados em background como os GLBs de
+   * personagem. Os placeholders procedurais ficam visíveis até o template
+   * chegar; applySceneryGlb troca cada placeholder pela versão GLB.
+   * Palmeira fica procedural: os dois bakes TRELLIS2 falharam (o voxel
+   * remesh estilhaça as frondas finas; sem voxel, o bake sai preto e o
+   * GLB fica com 140k tris + plano de chão) — ver work/scenery/.
+   */
+  async loadSceneryGlbs(): Promise<void> {
+    const jobs: Array<[string, string]> = [
+      ["temple", "/assets/scenery/temple.glb"],
+      ["house", "/assets/scenery/house.glb"],
+      ["stall", "/assets/scenery/stall.glb"],
+    ];
+    await Promise.all(
+      jobs.map(async ([key, url]) => {
+        try {
+          const gltf = await new GLTFLoader().loadAsync(url);
+          this.sceneryTemplates.set(key, gltf.scene);
+          this.applySceneryGlb(key);
+        } catch (err) {
+          console.warn(`Scenery GLB ${key} failed to load, keeping procedural:`, err);
+        }
+      }),
+    );
+  }
+
+  /** First mesh (geometry + material) of a loaded scenery template. */
+  private sceneryMesh(key: string): THREE.Mesh | null {
+    const tpl = this.sceneryTemplates.get(key);
+    if (!tpl) return null;
+    let found: THREE.Mesh | null = null;
+    tpl.traverse((o) => {
+      if (!found && o instanceof THREE.Mesh) found = o;
+    });
+    return found;
+  }
+
+  /**
+   * Swap the procedural placeholders of one key for the GLB version.
+   * Temple = single clone (front faces -Z in the GLB, plaza is +Z, so it
+   * turns PI); house = InstancedMesh from the recorded placements;
+   * stall = one clone per recorded placement.
+   */
+  private applySceneryGlb(key: string): void {
+    const tpl = this.sceneryTemplates.get(key);
+    if (!tpl) return;
+    for (const ph of [...this.sceneryPlaceholders]) {
+      if (ph.userData.sceneryKey === key) {
+        this.scene.remove(ph);
+        const idx = this.sceneryPlaceholders.indexOf(ph);
+        if (idx >= 0) this.sceneryPlaceholders.splice(idx, 1);
+      }
+    }
+    if (key === "temple") {
+      const clone = tpl.clone(true);
+      const y = this.terrainHeight(0, -30);
+      clone.position.set(0, y, -30);
+      // No rotation: the GLB front (columns, pediment, steps) is on +Z,
+      // and the plaza is +Z from the temple. (The old rotation.y = PI
+      // turned the dark back toward the plaza.)
+      clone.scale.setScalar(1.1);
+      this.scene.add(clone);
+    } else if (key === "house") {
+      const mesh = this.sceneryMesh("house");
+      if (!mesh || this.housePlacements.length === 0) return;
+      const mat = Array.isArray(mesh.material) ? mesh.material[0] : mesh.material;
+      if (!mat) return;
+      const items: InstancedItem[] = this.housePlacements.map((p) => ({
+        x: p.x,
+        y: this.terrainHeight(p.x, p.z),
+        z: p.z,
+        ry: p.ry,
+        s: p.s,
+      }));
+      this.scene.add(makeInstanced(mesh.geometry, mat, items));
+    } else if (key === "stall") {
+      for (const p of this.stallPlacements) {
+        const clone = tpl.clone(true);
+        clone.position.set(p.x, this.terrainHeight(p.x, p.z), p.z);
+        clone.rotation.y = p.ry;
+        clone.scale.setScalar(0.8);
+        this.scene.add(clone);
+      }
+    }
+  }
+
+  /**
    * GLB character (M2.5 test): loads a rigged glTF character and uses it as
    * the local player's mesh instead of the CharForge build. Kept for the
    * `?char=warrior` alias — new code should use loadGlbCharacter, which
@@ -1861,8 +2778,8 @@ export class WorldView {
     rig.lastT = nowMs;
     if (animState === 1) rig.phase += dt * 7.5;
     if (rig.staticRoot) {
-      // Unrigged male mesh: whole-body sway/lean/lunge on the inner
-      // group (rotation.y = PI stays untouched).
+      // Unrigged template fallback: whole-body sway/lean/lunge on the
+      // inner group (rotation.y = PI stays untouched).
       const tSec = nowMs / 1000;
       let pitch = 0.02 + 0.015 * Math.sin(tSec * 1.6);
       let roll = 0;
@@ -2015,30 +2932,26 @@ export class WorldView {
   }
 
   /** Mob mesh from gamedata (color/scale by mobId); ring = windup telegraph.
-   *  Escorpião and múmia get detailed procedural models; the rest keep the
-   *  generic placeholder. Stats/scale come from gamedata — visuals only. */
+   *  Every mobId has a detailed procedural model (see buildMobModel);
+   *  bosses (neferet/serket) carry a gold elite ring. Stats/scale come
+   *  from gamedata — visuals only. */
   updateMob(e: EntityState): void {
     let entry = this.mobs.get(e.id);
     if (!entry) {
       const data = MOBS.find((m) => m.id === e.mobId) ?? MOBS[0];
       const color = data ? Number.parseInt(data.color.slice(1), 16) : 0x888888;
       const scale = data?.scale ?? 1;
-      const mobId = e.mobId ?? "";
-      if (mobId === "escorpiao" || mobId === "escorpiao_alfa") {
-        const built = makeScorpion(color, scale);
-        this.scene.add(built.group);
-        entry = { group: built.group, ring: built.ring, tail: built.tail };
-      } else if (mobId === "mumia" || mobId === "mumia_ancia" || mobId === "neferet") {
-        const built = makeMummy(color, scale);
-        this.scene.add(built.group);
-        entry = { group: built.group, ring: built.ring };
-      } else {
-        const { group, ring } = makeMob(color, scale, mobId === "mumia");
-        this.scene.add(group);
-        entry = { group, ring };
-      }
+      const built = buildMobModel(e.mobId ?? "", color, scale);
+      this.scene.add(built.group);
+      const created: { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group } = {
+        group: built.group,
+        ring: built.ring,
+      };
+      if (built.tail !== undefined) created.tail = built.tail;
+      entry = created;
       this.mobs.set(e.id, entry);
     }
+    if (!entry) return; // narrowing: entry is always set above
     const [tx, , tz] = WORLD_TO_THREE(e.x, e.y);
     const ty = this.terrainHeight(tx, tz);
     entry.group.position.set(tx, ty, tz);
@@ -2052,6 +2965,25 @@ export class WorldView {
       const pulse = 0.85 + Math.sin(performance.now() / 90) * 0.15;
       entry.ring.scale.setScalar(pulse);
     }
+  }
+
+  /**
+   * Debug-only: place a visual-only mob at world (x, y) facing the camera
+   * (south), for Playwright verification of mobIds that never spawn in the
+   * current zone (golem/cultista). No server entity, no gameplay effect.
+   */
+  addTestMob(mobId: string, x: number, y: number): void {
+    const data = MOBS.find((m) => m.id === mobId);
+    if (!data) return;
+    const color = Number.parseInt(data.color.slice(1), 16);
+    const built = buildMobModel(mobId, color, data.scale);
+    const [tx, , tz] = WORLD_TO_THREE(x, y);
+    built.group.position.set(tx, this.terrainHeight(tx, tz), tz);
+    built.group.rotation.y = Math.PI; // face south = toward the 2.5D camera
+    this.scene.add(built.group);
+    const entry: { group: THREE.Group; tail?: THREE.Group } = { group: built.group };
+    if (built.tail !== undefined) entry.tail = built.tail;
+    this.testMobs.push(entry);
   }
 
   removeEntity(id: number): void {
@@ -2212,8 +3144,7 @@ export class WorldView {
     this.renderer.render(this.scene, this.camera);
   }
 
-  getStats(): { calls: number; triangles: number } {
-    // three 0.182 WebGPURenderer: info.render.calls is CUMULATIVE since the
+  getStats(): { calls: number; triangles: number } {    // three 0.182 WebGPURenderer: info.render.calls is CUMULATIVE since the
     // app started (it counts render() invocations = frames), NOT per-frame
     // draw calls — the F3 panel used to show 1742–4374 "draw calls" while the
     // scene only draws ~65 meshes. The per-frame count is drawCalls (the

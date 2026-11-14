@@ -1,4 +1,4 @@
-import { ZONE, armorById, armorsForClass, classById, skillById, zoneById, dungeonById, type ChainHit } from "@azure-edge/gamedata";
+import { ZONE, armorById, armorsForClass, classById, mobById, skillById, zoneById, dungeonById, type ChainHit } from "@azure-edge/gamedata";
 import { applyClassPreset, generateGenome, type CharacterGenome } from "@azure-edge/charforge";
 import {
   REMOTE_INTERP_BUFFER_MS,
@@ -42,6 +42,12 @@ const paramGender: "f" | "m" = params.get("gender") === "m" ? "m" : "f";
 const paramArmor = params.get("armor") ?? null;
 const paramZone = params.get("zone") ?? null;
 const paramDungeon = params.get("dungeon") ?? null;
+/** Debug-only visual mobs: `?testmobs=golem_areia,cultista_serket` places
+ *  local-only models near spawn (no server entity) so Playwright can
+ *  screenshot mobIds that never spawn in the current zone. */
+const paramTestMobs = params.get("testmobs") ?? null;
+/** Debug test mobs are placed once, on welcome (relative to the real spawn). */
+let testMobsPlaced = false;
 const cameraMode = parseCameraMode(params.get("camera"));
 /** Character mesh: `?char=warrior` forces the rigged GLB (skips the creator,
  *  Espadachim by default); `?char=capsule` forces the CharForge/capsule
@@ -52,7 +58,7 @@ const charParam = params.get("char");
 const charMode: "auto" | "glb" | "capsule" =
   charParam === "capsule" ? "capsule" : charParam === "warrior" ? "glb" : "auto";
 const GLB_CHARACTER_URL = "/assets/characters/warrior_f_r64_final.glb";
-const GLB_MALE_URL = "/assets/characters/warrior_m_r64_final_apose.glb";
+const GLB_MALE_URL = "/assets/characters/warrior_m_r64_final_rigged.glb";
 // Deploy-ready: on an https:// page the browser blocks plain ws://
 // (mixed content), so default to wss:// there. `?server=` still wins,
 // then the build-time VITE_GAME_SERVER_URL (e.g. wss://…onrender.com).
@@ -409,6 +415,20 @@ const client = new GameClient(serverUrl, simulatedLatencyMs, {
       predicted = { x: me.x, y: me.y, yaw: me.yaw, moving: false };
       // 2.5D: fixed camera, yaw stays 0 (W = north); 3D: orbit follows the spawn yaw.
       if (cameraMode === "3d") cameraYaw = me.yaw;
+      // Debug-only visual mobs (?testmobs=): place them north of the REAL
+      // spawn (player ids grow a golden-angle ring, so the origin is not
+      // the spawn). Distance scales with the mob so bosses fit the frame.
+      if (paramTestMobs && !testMobsPlaced) {
+        testMobsPlaced = true;
+        const ids = paramTestMobs.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+        ids.forEach((id, i) =>
+          view.addTestMob(
+            id,
+            me.x + (i - (ids.length - 1) / 2) * 4,
+            me.y + 4 * (mobById(id)?.scale ?? 1),
+          ),
+        );
+      }
     }
   },
   onSnapshot(snap: SnapshotPayload) {
@@ -780,7 +800,14 @@ async function startGame(genome: CharacterGenome, name: string): Promise<void> {
   });
   view.setCharMode(charMode);
   await view.init(zoneId, dungeon?.id);
+  // Debug handle for Playwright verification (draw calls / tris). Harmless
+  // read-only handle on the user's own client.
+  (window as unknown as { __aeView?: WorldView }).__aeView = view;
   view.setArmor(currentArmorId);
+  // Scenery GLBs (temple/house/stall): procedural placeholders swap to the
+  // TRELLIS2 meshes when they arrive; palm stays procedural. Loads in
+  // every character mode — ?char=capsule only swaps the CHARACTER mesh.
+  void view.loadSceneryGlbs();
   if (charMode === "capsule") {
     view.setLocalGenome(genome);
   } else {

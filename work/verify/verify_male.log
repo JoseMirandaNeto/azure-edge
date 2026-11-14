@@ -1,0 +1,11 @@
+spawned: true glb200: true
+backend: webgpu | fps: 51  frame: 31.6 ms | draw calls: 93  tris: 72851 | ping: 2 ms (sim 0 ms) | lost snapshots: 0  rejects: 0 | players: 1  mobs: 0  server tick: 20569 | pos: 2.9, -12.7  seq: 2  corr: 0.00 | classe: Espadachim  estado: idle  hp: 100% | zona: Cidade de Serket  câmera: 2.5d  armadura: espadachim_iniciante (T troca) | alvo: - | controles: LMB ataque · Espaço esquiva · RMB guarda · Q Corte Crescente · T armadura · WASD mover · roda zoom
+after settle: backend: webgpu | fps: 47  frame: 36.7 ms | draw calls: 94  tris: 72863 | ping: 4 ms (sim 0 ms) | lost snapshots: 0  rejects: 0 | players: 1  mobs: 0  server tick: 20625 | pos: 2.9, -12.7  seq: 4  corr: 0.00 | classe: Espadachim  estado: idle  hp: 100% | zona: Cidade de Serket  câmera: 2.5d  armadura: espadachim_iniciante (T troca) | alvo: - | controles: LMB ataque · Espaço esquiva · RMB guarda · Q Corte Crescente · T armadura · WASD mover · roda zoom
+shot 120_male_rigged_idle_front | fps: 35  frame: 56.4 ms | classe: Espadachim  estado: idle  hp: 100%
+shot 121_male_rigged_idle_back | fps: 32  frame: 61.9 ms | classe: Espadachim  estado: idle  hp: 100%
+shot 122_male_rigged_walk_south | fps: 28  frame: 69.8 ms | classe: Espadachim  estado: idle  hp: 100%
+shot 123_male_rigged_walk_north | fps: 28  frame: 67.3 ms | classe: Espadachim  estado: idle  hp: 100%
+shot 124_male_rigged_attack | fps: 23  frame: 76.4 ms | classe: Espadachim  estado: idle  hp: 100%
+shot 125_male_rigged_attack_late | fps: 26  frame: 72.4 ms | classe: Espadachim  estado: idle  hp: 100%
+shot 126_male_rigged_dodge | fps: 25  frame: 74.1 ms | classe: Espadachim  estado: idle  hp: 100%
+console errors: []

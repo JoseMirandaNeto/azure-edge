@@ -1,0 +1,16 @@
+130_female_facing spawn pos: 6.7, 11.7  seq: 3  corr: 0.00
+130_female_facing after S pos: 6.7, 11.1  seq: 4  corr: 0.00
+130_female_facing after W pos: 6.7, 12.4  seq: 8  corr: 0.07
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+page.evaluate: Execution context was destroyed, most likely because of a navigation
+    at debug (/home/hatch/workspace/azure-edge/work/verify/probe_facing.mjs:11:28)
+    at run (/home/hatch/workspace/azure-edge/work/verify/probe_facing.mjs:14:16)
+    at async file:///home/hatch/workspace/azure-edge/work/verify/probe_facing.mjs:36:1 {
+  log: [],
+  name: 'Error'
+}
+
+Node.js v24.22.1

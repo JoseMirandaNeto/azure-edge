@@ -1,0 +1,2 @@
+rig: rig: bones=33 staticRoot=false handR=true handL=true phase=0.00 names=DEF-foot.L,DEF-foot.R,DEF-forearm.L,DEF-forearm.L.001,DEF-forearm.R,DEF-forearm.R.001,DEF-hand.L,DEF-hand.R,DEF-pelvis.L,DEF-pelvis.R,DEF-shin.L,DEF-shin.L.001,DEF-shin.R,DEF-shin.R.001,DEF-shoulder.L,DEF-shoulder.R,DEF-spine,DEF-spine.001,DEF-spine.002,DEF-spine.003,DEF-spine.004,DEF-spine.005,DEF-spine.006,DEF-thigh.L,DEF-thigh.L.001,DEF-thigh.R,DEF-thigh.R.001,DEF-toe.L,DEF-toe.R,DEF-upper_arm.L,DEF-upper_arm.L.001,DEF-upper_arm.R,DEF-upper_arm.R.001
+done
