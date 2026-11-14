@@ -3,7 +3,6 @@ import {
   CITY,
   CLASSES,
   DUNGEONS,
-  SKILLS,
   ZONE,
   armorsForClass,
   classById,
@@ -12,6 +11,44 @@ import {
   type ZoneData,
 } from "@azure-edge/gamedata";
 import { loadSavedGenome } from "./creator.js";
+import {
+  INVENTORY_CAPACITY,
+  ITEM_FILTERS,
+  ITEM_SORTS,
+  RARITY_COLORS,
+  RARITY_LABELS,
+  SLOT_LABELS,
+  SLOT_ORDER,
+  bagItems,
+  buildItemCatalog,
+  canEquip,
+  catalogById,
+  discardItem,
+  equipItem,
+  formatGold,
+  isEquipped,
+  loadInventoryState,
+  saveInventoryState,
+  sellItem,
+  totalWeight,
+  unequipSlot,
+  useConsumable,
+  type EquipSlot,
+  type InventoryItem,
+  type InventoryState,
+  type ItemFilter,
+  type ItemSort,
+} from "./inventory.js";
+import {
+  loadProgress,
+  nodeStateLabel,
+  skillEffectLines,
+  skillKindLabel,
+  skillTreeNodes,
+  xpFraction,
+  xpToNextLevel,
+  type TreeNodeView,
+} from "./skilltree.js";
 import "./screens.css";
 
 /**
@@ -313,7 +350,7 @@ export interface ScreensOptions {
   getEquippedArmorId?: () => string | null;
   onPlay?: () => void;
   onContinue?: () => void;
-  onEquipArmor?: (armorId: string) => void;
+  onEquipArmor?: (armorId: string | null) => void;
   onQuality?: (quality: Quality) => void;
   onRespawn?: () => void;
   onReturnToStart?: () => void;
@@ -351,6 +388,16 @@ export class GameScreens {
   private mapCanvas: HTMLCanvasElement | null = null;
   private capturingAction: KeyAction | null = null;
   private startResolve: ((c: StartChoice) => void) | null = null;
+  // Janelas de skills / inventário (estado local, persiste em localStorage).
+  private invState: InventoryState | null = null;
+  private invFilter: ItemFilter = "all";
+  private invSort: ItemSort = "rarity";
+  private invSelected: string | null = null;
+  private invConfirmDiscard: string | null = null;
+  private invMsgText = "";
+  /** Tooltip travado após clicar num item: só volta quando o mouse sai da bolsa/boneco. */
+  private invTooltipLocked = false;
+  private skillSelected: string | null = null;
 
   constructor(options: ScreensOptions = {}) {
     this.opts = options;
@@ -643,6 +690,7 @@ export class GameScreens {
     el.querySelector(".ae-close")?.addEventListener("click", () => this.closeMenu(kind));
     const body = el.querySelector<HTMLElement>(".ae-menu-body");
     if (!body) return;
+    if (kind === "inventory" || kind === "skills") el.classList.add("ae-menu-wide");
     if (kind === "inventory") this.renderInventory(body);
     if (kind === "skills") this.renderSkills(body);
     if (kind === "map") this.renderMap(body);
@@ -695,83 +743,373 @@ export class GameScreens {
 
   // --- Inventário ---
 
+  /** Silhueta do boneco (paper doll): slots sobre um humanoide simples.
+   *  Slots de 46 px com folga vertical para o rótulo não colidir com o slot
+   *  de baixo; acessório/arma recuados para o rótulo caber no boneco. */
+  private dollSlotPosition(slot: EquipSlot): { left: string; top: string } {
+    switch (slot) {
+      case "head":
+        return { left: "50%", top: "8%" };
+      case "chest":
+        return { left: "50%", top: "32%" };
+      case "legs":
+        return { left: "50%", top: "57%" };
+      case "boots":
+        return { left: "50%", top: "82%" };
+      case "weapon":
+        return { left: "84%", top: "42%" };
+      case "accessory":
+        return { left: "16%", top: "33%" };
+    }
+  }
+
+  /** Miniatura do item: gradiente das cores da armadura ou letra inicial. */
+  private itemThumb(item: InventoryItem): string {
+    if (item.colors) {
+      return `<span class="ae-thumb" style="background:linear-gradient(135deg, ${item.colors.primary}, ${item.colors.secondary});border-color:${item.colors.accent}" aria-hidden="true"></span>`;
+    }
+    const letter = item.kind === "consumable" ? "✚" : item.name.charAt(0);
+    return `<span class="ae-thumb ae-thumb-letter" aria-hidden="true">${letter}</span>`;
+  }
+
+  /** Tooltip rico do item (stats, tier, nível, conjunto, preço, peso). */
+  private itemTooltipHtml(item: InventoryItem): string {
+    const clsName = item.classId ? (classById(item.classId)?.name ?? "") : "";
+    const lines = [
+      `<b style="color:${RARITY_COLORS[item.rarity]}">${item.name}</b>`,
+      `<span>${RARITY_LABELS[item.rarity]} · ${item.kind === "armor" ? "Armadura" : item.kind === "weapon" ? "Arma" : item.kind === "consumable" ? "Consumível" : "Acessório"}${item.slot ? ` · ${SLOT_LABELS[item.slot]}` : ""}</span>`,
+      ...item.stats.map((s) => `<span>• ${s}</span>`),
+    ];
+    if (item.setBonus) lines.push(`<span class="ae-tip-set">Bônus do conjunto: ${item.setBonus}</span>`);
+    if (item.classId) lines.push(`<span>Classe: ${clsName}</span>`);
+    lines.push(`<span>Tier ${item.tier} · requer nv ${item.minLevel} · peso ${item.weight}</span>`);
+    lines.push(`<span>Vende por ${item.sellPrice} de ouro</span>`);
+    return lines.join("");
+  }
+
   private renderInventory(body: HTMLElement): void {
     const classId = this.opts.getClassId?.() ?? "espadachim";
-    const equipped = this.opts.getEquippedArmorId?.() ?? null;
     const cls = classById(classId);
-    const mine = armorsForClass(classId);
-    const others = ARMORS.filter((a) => a.classId !== classId);
-    const bonusText = (a: (typeof ARMORS)[number]): string => {
-      const parts: string[] = [];
-      if (a.bonus.maxHp > 0) parts.push(`+${a.bonus.maxHp} HP máx.`);
-      if (a.bonus.atk) parts.push(`+${a.bonus.atk} ATQ`);
-      if (a.bonus.def) parts.push(`+${a.bonus.def} DEF`);
-      if (a.bonus.mana) parts.push(`+${a.bonus.mana} mana`);
-      return parts.length > 0 ? parts.join(" · ") : "Sem bônus de atributo";
-    };
-    const card = (a: (typeof ARMORS)[number], ownClass: boolean): string => {
-      const isEquipped = equipped === a.id;
-      return `<article class="ae-item ${isEquipped ? "equipped" : ""}" data-armor="${a.id}">
-        <div class="ae-item-swatch" style="background:linear-gradient(135deg, ${a.colors.primary}, ${a.colors.secondary});border-color:${a.colors.accent}" title="${a.name}"></div>
-        <div class="ae-item-info"><b>${a.name}</b>
-        <span>Tier ${a.tier} · nv ${a.minLevel ?? 1}+ · ${bonusText(a)}</span>
-        <span class="ae-item-bonus">${a.setBonus ?? ""}</span></div>
-        ${isEquipped
-          ? `<span class="ae-badge">Equipado</span>`
-          : ownClass
-            ? `<button type="button" class="ae-btn ae-btn-small" data-equip="${a.id}">Equipar</button>`
-            : `<span class="ae-badge ae-badge-dim">Outra classe</span>`}
-      </article>`;
-    };
+    const progress = loadProgress();
+    const catalog = buildItemCatalog();
+    const byId = catalogById(catalog);
+    // Sync com o equipado externo (tecla T, ?armor=): o estado local segue o jogo.
+    let state = this.invState ?? loadInventoryState(classId);
+    const extArmor = this.opts.getEquippedArmorId?.();
+    if (extArmor) {
+      const want = byId.get(`armor:${extArmor}`);
+      if (want && state.equipped.chest !== want.id) state = equipItem(state, want);
+    }
+    this.invState = state;
+    saveInventoryState(state);
+    const entries = bagItems(state, catalog, this.invFilter, this.invSort);
+    const weight = totalWeight(state, byId);
+    const selected = this.invSelected ? byId.get(this.invSelected) : undefined;
+    const msg = this.invMsgText;
+
+    const dollSlots = SLOT_ORDER.map((slot) => {
+      const itemId = state.equipped[slot];
+      const item = itemId ? byId.get(itemId) : undefined;
+      const pos = this.dollSlotPosition(slot);
+      return `<button type="button" class="ae-doll-slot ${item ? "filled" : "empty"}" style="left:${pos.left};top:${pos.top}" data-item-id="${item?.id ?? ""}" data-slot="${slot}" aria-label="${SLOT_LABELS[slot]}${item ? `: ${item.name}` : " (vazio)"}" title="${SLOT_LABELS[slot]}${item ? ` — ${item.name}` : " — vazio"}">${item ? this.itemThumb(item) : `<span class="ae-doll-empty" aria-hidden="true">＋</span>`}<span class="ae-doll-label">${SLOT_LABELS[slot]}</span></button>`;
+    }).join("");
+
+    const cells = entries
+      .map(({ item, qty }) => {
+        const locked = progress.level < item.minLevel;
+        const equipped = isEquipped(state, item.id);
+        return `<button type="button" class="ae-bag-cell ${this.invSelected === item.id ? "sel" : ""} ${locked ? "locked" : ""}" style="border-color:${RARITY_COLORS[item.rarity]}" data-item-id="${item.id}" aria-label="${item.name}${qty > 1 ? ` ×${qty}` : ""}${locked ? ` (requer nv ${item.minLevel})` : ""}${equipped ? " (equipado)" : ""}" title="${item.name}">${this.itemThumb(item)}${qty > 1 ? `<span class="ae-qty">×${qty}</span>` : ""}${equipped ? `<span class="ae-cell-equipped">E</span>` : ""}${locked ? `<span class="ae-cell-lock">nv ${item.minLevel}</span>` : ""}</button>`;
+      })
+      .join("");
+
+    let detail = `<p class="ae-note">Selecione um item na bolsa ou no boneco para ver os detalhes e as ações.</p>`;
+    if (selected) {
+      const equipped = isEquipped(state, selected.id);
+      const check = selected.slot ? canEquip(selected, classId, progress.level, state) : null;
+      const confirmDiscard = this.invConfirmDiscard === selected.id;
+      detail =
+        `<div class="ae-detail-card" style="border-color:${RARITY_COLORS[selected.rarity]}">` +
+        `<div class="ae-detail-head">${this.itemThumb(selected)}<div><b style="color:${RARITY_COLORS[selected.rarity]}">${selected.name}</b><span>${RARITY_LABELS[selected.rarity]} · ${selected.kind === "armor" ? "Armadura" : selected.kind === "weapon" ? "Arma" : selected.kind === "consumable" ? "Consumível" : "Acessório"}${selected.slot ? ` · ${SLOT_LABELS[selected.slot]}` : ""}</span></div></div>` +
+        `<p>${selected.description}</p>` +
+        `<ul class="ae-detail-stats">${selected.stats.map((s) => `<li>${s}</li>`).join("")}</ul>` +
+        (selected.setBonus ? `<p class="ae-item-bonus">Bônus do conjunto: ${selected.setBonus}</p>` : "") +
+        `<p class="ae-note">Tier ${selected.tier} · requer nv ${selected.minLevel} · peso ${selected.weight} · vende por ${selected.sellPrice} de ouro${selected.classId ? ` · classe: ${classById(selected.classId)?.name ?? selected.classId}` : ""}</p>` +
+        (equipped ? `<p><span class="ae-badge">Equipado</span></p>` : "") +
+        `<div class="ae-detail-actions">` +
+        (selected.slot && !equipped
+          ? `<button type="button" class="ae-btn ae-btn-small ae-btn-primary" data-action="equip" ${check && !check.ok ? "disabled" : ""}>Equipar</button>`
+          : "") +
+        (selected.slot && equipped
+          ? `<button type="button" class="ae-btn ae-btn-small" data-action="unequip">Desequipar</button>`
+          : "") +
+        (selected.kind === "consumable"
+          ? `<button type="button" class="ae-btn ae-btn-small ae-btn-primary" data-action="use">Usar</button>`
+          : "") +
+        `<button type="button" class="ae-btn ae-btn-small" data-action="sell" ${equipped ? "disabled" : ""}>Vender por ${selected.sellPrice} ouro</button>` +
+        (confirmDiscard
+          ? `<button type="button" class="ae-btn ae-btn-small ae-btn-danger" data-action="discard-confirm">Confirmar descarte</button><button type="button" class="ae-btn ae-btn-small" data-action="discard-cancel">Cancelar</button>`
+          : `<button type="button" class="ae-btn ae-btn-small ae-btn-danger" data-action="discard" ${equipped ? "disabled" : ""}>Descartar</button>`) +
+        `</div>` +
+        (check && !check.ok && !equipped ? `<p class="ae-note" role="status">${check.reason}</p>` : "") +
+        `</div>`;
+    }
+
     body.innerHTML =
-      `<p class="ae-note">Armadura da classe <b>${cls?.name ?? classId}</b> — o visual aplica na hora; o bônus de atributo vale a partir do próximo login.</p>` +
-      `<p class="ae-note">Inventário local (sem persistência no servidor ainda): 12 conjuntos, 3 por classe.</p>` +
-      `<h3>Equipado</h3><div class="ae-equip-slot">${equipped ? `Armadura: <b>${ARMORS.find((a) => a.id === equipped)?.name ?? equipped}</b>` : "Nenhuma armadura equipada."}</div>` +
-      `<h3>Seus conjuntos (${cls?.name ?? ""})</h3><div class="ae-grid">${mine.map((a) => card(a, true)).join("")}</div>` +
-      `<h3>Outras classes (só visualização)</h3><div class="ae-grid">${others.map((a) => card(a, false)).join("")}</div>` +
-      `<div class="ae-slots" aria-label="Slots vazios do inventário">${Array.from({ length: 12 }, () => `<span class="ae-slot"></span>`).join("")}</div>`;
-    body.querySelectorAll<HTMLButtonElement>("[data-equip]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const id = btn.dataset.equip;
-        if (!id) return;
-        window.dispatchEvent(new CustomEvent("ae:equip-armor", { detail: { armorId: id } }));
-        this.opts.onEquipArmor?.(id);
-        // Re-render para refletir o novo equipado (fonte: getter do main.ts;
-        // sem getter, marca localmente o botão clicado).
-        if (!this.opts.getEquippedArmorId) {
-          body.querySelectorAll(".ae-item").forEach((it) => it.classList.remove("equipped"));
-          btn.closest(".ae-item")?.classList.add("equipped");
-        } else {
-          this.renderInventory(body);
-        }
+      `<div class="ae-inv-head"><span class="ae-gold">◆ <b>${formatGold(state.gold)}</b> ouro</span><span>Peso <b>${weight}/${INVENTORY_CAPACITY}</b></span><span>${entries.length} ${entries.length === 1 ? "item" : "itens"} na bolsa</span></div>` +
+      `<p class="ae-note">Inventário <b>local</b> — inventário, ouro e equipamentos NÃO são salvos no servidor ainda (ele não persiste nada). Equipar um conjunto aplica o visual na hora; o bônus de atributo vale a partir do próximo login.</p>` +
+      `<div class="ae-inv-toolbar" role="group" aria-label="Filtro e ordenação">` +
+      ITEM_FILTERS.map((f) => `<button type="button" class="ae-btn ae-btn-small ${this.invFilter === f.id ? "ae-btn-primary" : ""}" data-filter="${f.id}">${f.label}</button>`).join("") +
+      `<select data-sort aria-label="Ordenar itens">${ITEM_SORTS.map((s) => `<option value="${s.id}" ${this.invSort === s.id ? "selected" : ""}>${s.label}</option>`).join("")}</select>` +
+      `</div>` +
+      `<div class="ae-inv-layout">` +
+      `<div class="ae-doll" aria-label="Boneco de equipamento">` +
+      `<svg class="ae-doll-svg" viewBox="0 0 100 200" aria-hidden="true"><circle cx="50" cy="18" r="12" /><rect x="34" y="34" width="32" height="46" rx="9" /><path d="M34 44 L18 78 M66 44 L82 78" /><rect x="36" y="82" width="12" height="58" rx="6" /><rect x="52" y="82" width="12" height="58" rx="6" /><rect x="34" y="140" width="14" height="16" rx="4" /><rect x="52" y="140" width="14" height="16" rx="4" /></svg>` +
+      dollSlots +
+      `</div>` +
+      `<div class="ae-bag" role="list" aria-label="Itens da bolsa">${cells.length > 0 ? cells : `<p class="ae-note">Nenhum item neste filtro.</p>`}</div>` +
+      `<div class="ae-inv-detail" data-detail>${detail}</div>` +
+      `</div>` +
+      `<p class="ae-inv-msg" role="status">${msg}</p>` +
+      `<div class="ae-tooltip" hidden></div>`;
+
+    const rerender = (message: string): void => {
+      this.invMsgText = message;
+      this.renderInventory(body);
+    };
+    const tooltip = body.querySelector<HTMLElement>(".ae-tooltip");
+    const showTooltip = (itemId: string, x: number, y: number): void => {
+      if (this.invTooltipLocked) return;
+      const item = byId.get(itemId);
+      if (!item || !tooltip) return;
+      tooltip.innerHTML = this.itemTooltipHtml(item);
+      tooltip.hidden = false;
+      const w = 260;
+      const h = 170;
+      tooltip.style.left = `${Math.min(window.innerWidth - w - 8, Math.max(8, x + 14))}px`;
+      tooltip.style.top = `${Math.min(window.innerHeight - h - 8, Math.max(8, y + 14))}px`;
+    };
+    const hideTooltip = (): void => {
+      if (tooltip) tooltip.hidden = true;
+    };
+    const bindHover = (container: HTMLElement | null): void => {
+      container?.addEventListener("mouseover", (e) => {
+        const target = (e.target as HTMLElement).closest<HTMLElement>("[data-item-id]");
+        const id = target?.dataset.itemId;
+        if (id) showTooltip(id, e.clientX, e.clientY);
       });
+      container?.addEventListener("mousemove", (e) => {
+        const target = (e.target as HTMLElement).closest<HTMLElement>("[data-item-id]");
+        const id = target?.dataset.itemId;
+        if (id && tooltip && !tooltip.hidden) showTooltip(id, e.clientX, e.clientY);
+      });
+      container?.addEventListener("mouseout", hideTooltip);
+      container?.addEventListener("mouseleave", () => {
+        this.invTooltipLocked = false;
+      });
+    };
+    bindHover(body.querySelector(".ae-bag"));
+    bindHover(body.querySelector(".ae-doll"));
+
+    body.querySelector(".ae-inv-toolbar")?.addEventListener("click", (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-filter]");
+      if (!btn) return;
+      this.invFilter = btn.dataset.filter as ItemFilter;
+      this.invConfirmDiscard = null;
+      this.renderInventory(body);
+    });
+    body.querySelector<HTMLSelectElement>("[data-sort]")?.addEventListener("change", (e) => {
+      this.invSort = (e.target as HTMLSelectElement).value as ItemSort;
+      this.renderInventory(body);
+    });
+    body.querySelector(".ae-inv-layout")?.addEventListener("click", (e) => {
+      const cell = (e.target as HTMLElement).closest<HTMLElement>("[data-item-id]");
+      const actionBtn = (e.target as HTMLElement).closest<HTMLElement>("[data-action]");
+      if (actionBtn) {
+        const item = selected;
+        if (!item) return;
+        const action = actionBtn.dataset.action;
+        if (action === "equip") {
+          const check = canEquip(item, classId, progress.level, this.invState ?? state);
+          if (!check.ok) {
+            rerender(check.reason);
+            return;
+          }
+          this.invState = equipItem(this.invState ?? state, item);
+          saveInventoryState(this.invState);
+          if (item.armorId) {
+            window.dispatchEvent(new CustomEvent("ae:equip-armor", { detail: { armorId: item.armorId } }));
+            this.opts.onEquipArmor?.(item.armorId);
+          }
+          rerender(`${item.name} equipado — visual aplicado na hora (local).`);
+          return;
+        }
+        if (action === "unequip" && item.slot) {
+          this.invState = unequipSlot(this.invState ?? state, item.slot);
+          saveInventoryState(this.invState);
+          if (item.armorId) {
+            window.dispatchEvent(new CustomEvent("ae:equip-armor", { detail: { armorId: null } }));
+            this.opts.onEquipArmor?.(null);
+          }
+          rerender(`${item.name} desequipado e guardado na bolsa.`);
+          return;
+        }
+        if (action === "use") {
+          const res = useConsumable(this.invState ?? state, item);
+          if (!res.ok) {
+            rerender(res.reason);
+            return;
+          }
+          this.invState = res.state;
+          saveInventoryState(this.invState);
+          const heal = item.healHp ?? 0;
+          const mana = item.restoreMana ?? 0;
+          window.dispatchEvent(
+            new CustomEvent("ae:use-potion", { detail: { name: item.name, healHp: heal, restoreMana: mana } }),
+          );
+          rerender(
+            heal > 0
+              ? `Você usou ${item.name} e recuperou ${heal} de HP (efeito local — o servidor ainda não aplica consumíveis).`
+              : `Você usou ${item.name} e recuperou ${mana} de mana (efeito local).`,
+          );
+          return;
+        }
+        if (action === "sell") {
+          const res = sellItem(this.invState ?? state, item);
+          if (!res.ok) {
+            rerender(res.reason);
+            return;
+          }
+          this.invState = res.state;
+          saveInventoryState(this.invState);
+          rerender(`${item.name} vendido por ${res.gained} de ouro (local). Saldo: ${formatGold(res.state.gold)} ouro.`);
+          return;
+        }
+        if (action === "discard") {
+          this.invConfirmDiscard = item.id;
+          this.renderInventory(body);
+          return;
+        }
+        if (action === "discard-confirm") {
+          const res = discardItem(this.invState ?? state, item);
+          if (!res.ok) {
+            rerender(res.reason);
+            return;
+          }
+          this.invState = res.state;
+          this.invConfirmDiscard = null;
+          if (this.invSelected === item.id) this.invSelected = null;
+          saveInventoryState(this.invState);
+          rerender(`${item.name} descartado (sem ouro de volta).`);
+          return;
+        }
+        if (action === "discard-cancel") {
+          this.invConfirmDiscard = null;
+          this.renderInventory(body);
+          return;
+        }
+        return;
+      }
+      if (cell?.dataset.itemId) {
+        this.invSelected = cell.dataset.itemId;
+        this.invConfirmDiscard = null;
+        this.invTooltipLocked = true;
+        hideTooltip();
+        this.renderInventory(body);
+      }
     });
   }
 
   // --- Skills ---
 
+  /** Linhas SVG que ligam os nós da árvore (coordenadas em % da árvore). */
+  private treeConnectorPath(): string {
+    // Centros das linhas: raiz 16,7% · galhos 50% · ocultos 83,3%; ônibus a 33,3% e 66,7%.
+    return (
+      "M50 16.7 V33.3 M16.7 33.3 H83.3 M16.7 33.3 V50 M50 33.3 V50 M83.3 33.3 V50 " +
+      "M50 50 V66.7 M12.5 66.7 H87.5 M12.5 66.7 V83.3 M37.5 66.7 V83.3 M62.5 66.7 V83.3 M87.5 66.7 V83.3"
+    );
+  }
+
+  private nodeShortLabel(node: TreeNodeView): string {
+    switch (node.state) {
+      case "unlocked":
+        return "Ativa · Q";
+      case "other-class":
+        return node.classId ? (classById(node.classId)?.name ?? "") : "";
+      case "hidden":
+        return "Oculta";
+    }
+  }
+
   private renderSkills(body: HTMLElement): void {
     const classId = this.opts.getClassId?.() ?? "espadachim";
     const cls = classById(classId);
-    const signatureId = cls?.skillId ?? "";
-    const skills = SKILLS.filter((s) => s.classId === classId);
+    const progress = loadProgress();
+    const nodes = skillTreeNodes(classId);
+    const selected = nodes.find((n) => n.id === this.skillSelected) ?? nodes.find((n) => n.row === 0) ?? nodes[0];
+    const xpNeed = xpToNextLevel(progress.level);
+    const xpPct = Math.round(xpFraction(progress) * 100);
+
+    const nodeHtml = (node: TreeNodeView): string =>
+      `<div class="ae-tree-node"><button type="button" class="ae-node-btn ae-node-${node.state} ${selected?.id === node.id ? "sel" : ""}" data-node="${node.id}" aria-pressed="${selected?.id === node.id}" aria-label="${node.label} — ${nodeStateLabel(node)}">${node.icon ? `<img src="${node.icon}" alt="" draggable="false" />` : `<span class="ae-node-hidden" aria-hidden="true">?</span>`}</button><span class="ae-node-name">${node.label}</span><span class="ae-node-state">${this.nodeShortLabel(node)}</span></div>`;
+
+    const rows = [0, 1, 2]
+      .map(
+        (row) =>
+          `<div class="ae-tree-row">${nodes.filter((n) => n.row === row).map(nodeHtml).join("")}</div>`,
+      )
+      .join("");
+
+    let detail = "";
+    if (!selected) {
+      detail = `<p class="ae-note">Nenhuma skill para mostrar.</p>`;
+    } else if (selected.skillId) {
+      const skill = skillById(selected.skillId);
+      if (!skill) {
+        detail = `<p class="ae-note">Skill não encontrada nos dados.</p>`;
+      } else {
+        const skillCls = classById(skill.classId);
+        detail =
+          `<div class="ae-detail-card" style="border-color:#d4a017">` +
+          `<div class="ae-detail-head">${selected.icon ? `<img class="ae-skill-icon" src="${selected.icon}" alt="Ícone de ${skill.name}" />` : ""}<div><b>${skill.name}</b><span>${skillCls?.name ?? skill.classId} · ${skillKindLabel(skill.kind)} · assinatura</span></div></div>` +
+          `<ul class="ae-detail-stats">${skillEffectLines(skill).map((l) => `<li>${l}</li>`).join("")}</ul>` +
+          `<p class="ae-note">Custo: <b>${skill.costMana} de mana</b> · Recarga: <b>${skill.cooldownS} s</b> · Tecla: <b>Q</b></p>` +
+          (skill.description ? `<p>${skill.description}</p>` : "") +
+          (skill.animation ? `<p class="ae-note">Animação: ${skill.animation}</p>` : "") +
+          (selected.state === "unlocked"
+            ? `<p><span class="ae-badge ae-badge-active">Funciona no servidor — tecla Q</span></p><p class="ae-note">É a única skill que executa no servidor hoje. As outras chegam em M3.</p>`
+            : `<p><span class="ae-badge">Outra classe · ${skillCls?.name ?? ""}</span></p><p class="ae-note">Pertence a ${skillCls?.name ?? skill.classId} — este personagem não pode aprendê-la. Para usá-la, crie um personagem dessa classe.</p>`) +
+          `</div>`;
+      }
+    } else {
+      detail =
+        `<div class="ae-detail-card ae-detail-hidden">` +
+        `<div class="ae-detail-head"><span class="ae-node-hidden ae-node-hidden-big" aria-hidden="true">?</span><div><b>Skill oculta</b><span>??? · em breve (M3)</span></div></div>` +
+        `<p>Este slot ainda não foi revelado. Novas skills chegam em M3 — nenhum nome, número ou efeito foi inventado aqui.</p>` +
+        `<p class="ae-note">Por enquanto, as 4 skills iniciais são as assinaturas: uma por classe, com ícone real e detalhe completo.</p>` +
+        `</div>`;
+    }
+
     body.innerHTML =
-      `<p class="ae-note">Skills de <b>${cls?.name ?? classId}</b> (dados de gamedata). Só a assinatura (Q) funciona no servidor por enquanto.</p>` +
-      `<div class="ae-grid">${skills.map((s) => {
-        const active = s.id === signatureId;
-        const icon = SKILL_ICONS[s.id];
-        return `<article class="ae-item ae-skill">
-          ${icon
-            ? `<img class="ae-skill-icon" src="${icon}" alt="Ícone de ${s.name}" />`
-            : `<span class="ae-skill-icon ae-skill-initial" aria-hidden="true">${s.name.charAt(0)}</span>`}
-          <div class="ae-item-info"><b>${s.name}</b>
-          <span>${s.kind === "damage" ? "Dano" : s.kind === "heal" ? "Cura" : s.kind === "taunt" ? "Provocação" : s.kind === "buff" ? "Buff" : "Mobilidade"} · ${s.cooldownS} s recarga · ${s.costMana} mana</span>
-          <span class="ae-item-bonus">${s.description ?? ""}</span></div>
-          ${active ? `<span class="ae-badge ae-badge-active">ATIVA — tecla Q</span>` : `<span class="ae-badge">Em breve</span>`}
-        </article>`;
-      }).join("")}</div>` +
-      `<p class="ae-note">As outras 3 skills existem nos dados, mas ainda não executam no servidor. Não há inventário de skill aqui — só consulta.</p>`;
+      `<div class="ae-xp-head"><span class="ae-xp-class"><b>${cls?.name ?? classId}</b> · nv ${progress.level}</span>` +
+      `<span class="ae-xp-bar" role="progressbar" aria-valuenow="${progress.xp}" aria-valuemax="${xpNeed}" aria-label="Experiência"><span class="ae-xp-fill" style="width:${xpPct}%"></span><span class="ae-xp-text">${progress.xp}/${xpNeed} XP</span></span>` +
+      `<span class="ae-skill-points">✦ ${progress.skillPoints} ${progress.skillPoints === 1 ? "ponto" : "pontos"} de skill</span></div>` +
+      `<p class="ae-note">Árvore de skills — as 4 skills iniciais são as assinaturas (uma por classe). Progressão (nv/XP/pontos) é <b>local</b>: o servidor ainda não envia XP nem nível.</p>` +
+      `<div class="ae-skill-layout"><div class="ae-tree" role="tree" aria-label="Árvore de skills">` +
+      `<svg class="ae-tree-lines" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><path d="${this.treeConnectorPath()}" /></svg>` +
+      rows +
+      `</div><div class="ae-skill-detail" data-detail>${detail}</div></div>` +
+      `<p class="ae-note">Só a assinatura (Q) da sua classe executa no servidor hoje. As outras 3 assinaturas pertencem às outras classes; os slots “???” são skills futuras, sem arte nem funcionalidade inventada.</p>`;
+
+    body.querySelector(".ae-tree")?.addEventListener("click", (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLElement>("[data-node]");
+      if (!btn?.dataset.node) return;
+      this.skillSelected = btn.dataset.node;
+      this.renderSkills(body);
+    });
   }
+
+  // --- Mapa ---
 
   // --- Mapa ---
 

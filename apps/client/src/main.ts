@@ -818,6 +818,13 @@ document.getElementById("btn-personagem")?.addEventListener("click", () => {
   })();
 });
 
+/** Poção usada no inventário (efeito LOCAL — o servidor não aplica consumíveis). */
+window.addEventListener("ae:use-potion", (e) => {
+  const detail = (e as CustomEvent<{ healHp?: number; restoreMana?: number }>).detail;
+  if (detail?.healHp) hud?.showLocalRestore("hp", detail.healHp);
+  if (detail?.restoreMana) hud?.showLocalRestore("mana", detail.restoreMana);
+});
+
 /**
  * Boot: no saved genome (or `?creator=1`) → the creator runs first
  * (class first, then customization); otherwise straight into the zone.

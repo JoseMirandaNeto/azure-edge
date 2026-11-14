@@ -795,6 +795,17 @@ export class Hud {
     this.toasts.push({ root, timer });
   }
 
+  /** Efeito LOCAL de consumível (poção): flash de cura na barra de HP + toast.
+   *  Não toca o servidor — o HP autoritativo continua vindo do snapshot. */
+  showLocalRestore(kind: "hp" | "mana", amount: number): void {
+    if (kind === "hp") {
+      this.flashBar(this.hpFill, "ae-flash-heal");
+      this.toast(`+${amount} de HP (local — o servidor ainda não aplica consumíveis)`, "info");
+    } else {
+      this.toast(`+${amount} de mana (local — o servidor ainda não aplica consumíveis)`, "info");
+    }
+  }
+
   /** Mensagem de sistema no chat (aba Zona, salvo no histórico). */
   addSystemMessage(text: string): void {
     this.pushChat("zona", "Sistema", text, true);

@@ -115,3 +115,340 @@
   .ae-btn-big { min-width: 160px; font-size: 16px; padding: 12px 24px; }
   .ae-panel { padding: 18px; }
 }
+
+/* --- Janelas largas: Skills (K) e Inventário (I) --- */
+.ae-menu.ae-menu-wide {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+  width: min(980px, calc(100vw - 32px));
+}
+@media (min-width: 1400px) { .ae-menu.ae-menu-wide { width: 1020px; } }
+
+/* --- Skills: barra de XP / árvore / detalhe --- */
+.ae-xp-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: rgba(20, 40, 60, 0.5);
+  border: 1px solid var(--ae-line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+}
+.ae-xp-class { font-size: 14px; white-space: nowrap; }
+.ae-xp-bar {
+  position: relative;
+  flex: 1;
+  min-width: 180px;
+  height: 18px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.ae-xp-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--ae-jade), #7fe0c0);
+  border-radius: 9px;
+  transition: width 0.25s ease;
+}
+.ae-xp-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 2px #000;
+}
+.ae-skill-points { font-size: 13px; font-weight: 700; color: #7fe0c0; white-space: nowrap; }
+
+.ae-skill-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 14px;
+  align-items: start;
+}
+.ae-tree {
+  position: relative;
+  height: 312px;
+  background: radial-gradient(ellipse at 50% 0%, rgba(47, 174, 143, 0.12), transparent 60%), rgba(10, 26, 40, 0.55);
+  border: 1px solid var(--ae-line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.ae-tree-lines { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ae-tree-lines path {
+  fill: none;
+  stroke: rgba(212, 160, 23, 0.65);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+.ae-tree-row {
+  position: relative;
+  z-index: 1;
+  height: 104px;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+}
+.ae-tree-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 112px;
+  min-width: 0;
+}
+.ae-node-btn {
+  width: 62px;
+  height: 62px;
+  padding: 0;
+  border-radius: 12px;
+  background: rgba(8, 24, 36, 0.95);
+  border: 2px solid var(--ae-line);
+  cursor: pointer;
+  overflow: hidden;
+  flex: none;
+}
+.ae-node-btn img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ae-node-btn:hover { border-color: #7cc4ff; }
+.ae-node-btn.sel { border-color: var(--ae-gold); box-shadow: 0 0 0 2px rgba(212, 160, 23, 0.35), 0 0 14px rgba(212, 160, 23, 0.35); }
+.ae-node-unlocked { border-color: #d4a017; box-shadow: 0 0 10px rgba(212, 160, 23, 0.3); }
+.ae-node-other-class { opacity: 0.85; }
+.ae-node-other-class img { filter: saturate(0.75); }
+.ae-node-hidden {
+  border-style: dashed;
+  border-color: rgba(157, 184, 204, 0.5);
+  background: rgba(8, 24, 36, 0.6);
+}
+.ae-node-hidden,
+.ae-node-hidden-big {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--ae-muted);
+}
+.ae-node-hidden-big { width: 44px; height: 44px; flex: none; border-radius: 8px; border: 2px dashed rgba(157, 184, 204, 0.5); }
+.ae-node-name {
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.2;
+  max-width: 112px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ae-node-state { font-size: 10px; color: var(--ae-muted); text-align: center; line-height: 1.2; }
+.ae-node-unlocked + .ae-node-name + .ae-node-state { color: #ffd98a; }
+.ae-skill-detail { min-width: 0; }
+
+/* --- Inventário: ouro/peso, toolbar, boneco, bolsa, detalhe --- */
+.ae-inv-head {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  background: rgba(20, 40, 60, 0.5);
+  border: 1px solid var(--ae-line);
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.ae-gold { color: #ffd75a; font-size: 14px; }
+.ae-inv-toolbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 8px 0 12px; }
+.ae-inv-toolbar select {
+  background: rgba(20, 40, 60, 0.9);
+  color: var(--ae-text);
+  border: 1px solid var(--ae-line);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  margin-left: auto;
+}
+.ae-inv-layout {
+  display: grid;
+  grid-template-columns: 188px minmax(0, 1fr) 272px;
+  gap: 12px;
+  align-items: start;
+}
+.ae-doll {
+  position: relative;
+  height: 316px;
+  background: radial-gradient(ellipse at 50% 20%, rgba(124, 196, 255, 0.14), transparent 65%), rgba(10, 26, 40, 0.55);
+  border: 1px solid var(--ae-line);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.ae-doll-svg { position: absolute; inset: 0; width: 100%; height: 100%; fill: rgba(124, 196, 255, 0.22); stroke: #3a6a8a; stroke-width: 2; }
+.ae-doll-slot {
+  position: absolute;
+  width: 46px;
+  height: 46px;
+  transform: translate(-50%, -50%);
+  border-radius: 10px;
+  border: 2px dashed rgba(157, 184, 204, 0.55);
+  background: rgba(8, 24, 36, 0.85);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ae-doll-slot.filled { border-style: solid; border-color: var(--ae-gold); }
+.ae-doll-slot:hover { border-color: #7cc4ff; }
+.ae-doll-empty { font-size: 18px; color: var(--ae-muted); }
+.ae-doll-label {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: var(--ae-muted);
+  white-space: nowrap;
+  background: rgba(5, 20, 30, 0.85);
+  border-radius: 3px;
+  padding: 0 3px;
+  text-shadow: 0 1px 2px #000;
+}
+.ae-bag {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(58px, 1fr));
+  gap: 8px;
+  max-height: 316px;
+  overflow-y: auto;
+  padding: 2px;
+  align-content: start;
+}
+.ae-bag-cell {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  border: 2px solid var(--ae-line);
+  background: rgba(20, 40, 60, 0.6);
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ae-bag-cell:hover { filter: brightness(1.25); }
+.ae-bag-cell.sel { box-shadow: 0 0 0 2px var(--ae-gold); }
+.ae-bag-cell.locked { opacity: 0.55; }
+.ae-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  border: 2px solid #555;
+  display: block;
+}
+.ae-thumb-letter {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 800;
+  color: #7cc4ff;
+  background: rgba(20, 40, 60, 0.8);
+}
+.ae-qty {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  font-size: 11px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 0 1px 2px #000;
+}
+.ae-cell-equipped {
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  font-size: 10px;
+  font-weight: 800;
+  color: #0b1620;
+  background: var(--ae-gold);
+  border-radius: 4px;
+  padding: 0 4px;
+}
+.ae-cell-lock {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  font-size: 9px;
+  font-weight: 700;
+  text-align: center;
+  color: #ffb3b3;
+  background: rgba(5, 20, 30, 0.85);
+  border-radius: 0 0 6px 6px;
+  padding: 1px 0;
+}
+.ae-inv-detail { min-width: 0; }
+.ae-inv-msg { min-height: 18px; margin: 10px 0 0; font-size: 12px; color: #ffd98a; }
+
+/* --- Painel de detalhe (skills e inventário) --- */
+.ae-detail-card {
+  border: 1px solid var(--ae-line);
+  border-radius: 10px;
+  background: rgba(20, 40, 60, 0.5);
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.ae-detail-card p { margin: 8px 0 0; color: var(--ae-text); }
+.ae-detail-card p.ae-note { color: var(--ae-muted); }
+.ae-detail-head { display: flex; gap: 10px; align-items: center; }
+.ae-detail-head > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ae-detail-head b { font-size: 15px; }
+.ae-detail-head span { font-size: 12px; color: var(--ae-muted); }
+.ae-detail-stats { margin: 10px 0 0; padding-left: 18px; }
+.ae-detail-stats li { margin: 2px 0; }
+.ae-detail-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.ae-detail-hidden { border-style: dashed; }
+
+/* --- Tooltip rico do inventário --- */
+.ae-tooltip {
+  position: fixed;
+  z-index: 200;
+  width: 260px;
+  background: rgba(5, 20, 30, 0.97);
+  border: 1px solid var(--ae-gold);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ae-text);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+}
+.ae-tooltip span { color: var(--ae-muted); }
+.ae-tooltip b { font-size: 13px; }
+.ae-tip-set { color: #ffd98a !important; font-style: italic; }
+
+/* --- Responsivo: janelas largas empilham em telas menores --- */
+@media (max-width: 900px) {
+  .ae-skill-layout { grid-template-columns: 1fr; }
+  .ae-tree { height: 300px; }
+  .ae-inv-layout { grid-template-columns: 150px minmax(0, 1fr); }
+  .ae-inv-detail { grid-column: 1 / -1; }
+  .ae-doll { height: 260px; }
+  .ae-bag { max-height: 260px; }
+}
+@media (max-height: 720px) {
+  .ae-tree { height: 288px; }
+  .ae-tree-row { height: 96px; }
+  .ae-doll, .ae-bag { max-height: 264px; }
+  .ae-doll { height: 264px; }
+}
