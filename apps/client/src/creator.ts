@@ -17,6 +17,7 @@ import {
   type FaceMorphKey,
 } from "@azure-edge/charforge";
 import { buildCharacter, disposeCharacter, type CharacterBuild } from "@azure-edge/engine-adapter";
+import { GLB_FEMALE_URL, GLB_MALE_URL, validateCharacterName } from "./screens.js";
 
 /**
  * Character creator (M2) — class FIRST, then customization (decisão de
@@ -89,6 +90,11 @@ export class CharacterCreator {
   private readonly scene = new THREE.Scene();
   private readonly camera: THREE.PerspectiveCamera;
   private build: CharacterBuild | null = null;
+  /** GLB real (guerreiro/a f/m) carregado para a prévia; fallback = CharForge. */
+  private readonly glbGroups = new Map<"f" | "m", THREE.Group>();
+  private readonly glbLoading = new Set<"f" | "m">();
+  private readonly glbFailed = new Set<"f" | "m">();
+  private classChosen = false;
   private previewYaw = 0.7;
   private dragging = false;
   private lastX = 0;
@@ -138,6 +144,8 @@ export class CharacterCreator {
   show(initial: CharacterGenome | null, name: string): Promise<CreatorResult> {
     this.draft = initial ? structuredClone(initial) : applyClassPreset(generateGenome(randomSeed()), "espadachim");
     this.name = name;
+    // Reabrir com genome salvo = classe já escolhida; novo = escolhe primeiro.
+    this.classChosen = initial !== null;
     this.root.classList.remove("hidden");
     this.visible = true;
     this.resize();
@@ -148,7 +156,9 @@ export class CharacterCreator {
     this.syncControls();
     // Class already chosen (reopening) → straight to customization.
     this.showStep(initial ? "custom" : "class");
+    this.updateEnterState();
     this.dirty = true;
+    void this.loadGlbPreview(this.draft.gender);
     this.loop();
     return new Promise((resolve) => {
       this.resolve = resolve;
@@ -177,15 +187,28 @@ export class CharacterCreator {
   private loop = (): void => {
     if (!this.visible) return;
     this.raf = requestAnimationFrame(this.loop);
+    const glb = this.glbGroups.get(this.draft.gender) ?? null;
     if (this.dirty && this.build !== null) {
       this.scene.remove(this.build.group);
       disposeCharacter(this.build);
       this.build = null;
     }
-    if (this.dirty) {
+    if (this.dirty && !glb) {
       this.build = buildCharacter(this.draft, 0);
       this.build.group.rotation.y = this.previewYaw;
       this.scene.add(this.build.group);
+      this.dirty = false;
+    } else if (glb) {
+      // GLB real na prévia: esconde o CharForge e gira devagar.
+      if (this.build) {
+        this.scene.remove(this.build.group);
+        disposeCharacter(this.build);
+        this.build = null;
+      }
+      if (glb.parent !== this.scene) this.scene.add(glb);
+      glb.rotation.y = this.previewYaw;
+      if (!this.dragging) this.previewYaw += 0.003;
+      // A prévia GLB não reflete sliders/morphs (só gênero); limpa o dirty.
       this.dirty = false;
     } else if (this.build) {
       this.build.group.rotation.y = this.previewYaw;
@@ -193,6 +216,38 @@ export class CharacterCreator {
     }
     this.renderer.render(this.scene, this.camera);
   };
+
+  /** Carrega o GLB real do gênero (f/m) para a prévia; falha → CharForge. */
+  private async loadGlbPreview(gender: "f" | "m"): Promise<void> {
+    if (this.glbGroups.has(gender) || this.glbLoading.has(gender) || this.glbFailed.has(gender)) {
+      return;
+    }
+    this.glbLoading.add(gender);
+    try {
+      const { GLTFLoader } = await import("three/examples/jsm/loaders/GLTFLoader.js");
+      const loader = new GLTFLoader();
+      const url = gender === "f" ? GLB_FEMALE_URL : GLB_MALE_URL;
+      const gltf = await loader.loadAsync(url);
+      const group = gltf.scene;
+      // A-pose masculina e GLB feminino têm alturas/escalas diferentes:
+      // normaliza para ~1,8 m de altura centrado na origem.
+      const box = new THREE.Box3().setFromObject(group);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+      if (size.y > 0.01) {
+        const s = 1.8 / size.y;
+        group.scale.setScalar(s);
+        const recenter = new THREE.Box3().setFromObject(group);
+        group.position.y -= recenter.min.y;
+      }
+      this.glbGroups.set(gender, group);
+      if (this.visible && this.draft.gender === gender) this.dirty = true;
+    } catch {
+      this.glbFailed.add(gender);
+    } finally {
+      this.glbLoading.delete(gender);
+    }
+  }
 
   private showStep(step: "class" | "custom"): void {
     const classEl = document.getElementById("creator-step-class");
@@ -215,18 +270,26 @@ export class CharacterCreator {
     const grid = document.getElementById("class-grid");
     if (grid) {
       for (const cls of CLASSES) {
-        const skill = skillById(cls.skillId)?.name ?? "";
+        const skill = skillById(cls.skillId);
         const icon = SKILL_ICONS[cls.skillId];
         const card = document.createElement("button");
         card.className = "class-card";
         card.type = "button";
+        card.dataset.classId = cls.id;
         card.innerHTML =
-          (icon ? `<img class="class-icon" src="${icon}" alt="Ícone de ${skill}" />` : "") +
+          (icon ? `<img class="class-icon" src="${icon}" alt="Ícone de ${skill?.name ?? ""}" />` : "") +
           `<b>${cls.name}</b><br />` +
-          `<span>${cls.role} · ${cls.weapon}</span><br /><span>Skill: ${skill}</span>`;
+          `<span>${cls.role} · ${cls.weapon}</span><br />` +
+          `<span class="class-stats">HP ${cls.base.maxHp} · ATQ ${cls.base.atk} · DEF ${cls.base.def} · Mana ${cls.base.mana}</span><br />` +
+          `<span>Skill: ${skill?.name ?? ""}</span><br />` +
+          `<span class="class-desc">${skill?.description ?? ""}</span>`;
         card.addEventListener("click", () => {
           this.draft = applyClassPreset(this.draft, cls.id as ClassId);
+          this.classChosen = true;
+          grid.querySelectorAll(".class-card").forEach((c) => c.classList.remove("sel"));
+          card.classList.add("sel");
           this.syncControls();
+          this.updateEnterState();
           this.rebuild();
           this.showStep("custom");
         });
@@ -244,11 +307,20 @@ export class CharacterCreator {
 
     // --- Step 2: name, gender, sliders, swatches ---
     const nameInput = $("creator-name") as HTMLInputElement | null;
+    const nameError = $("creator-name-error");
     if (nameInput) {
       nameInput.value = this.name;
+      nameInput.addEventListener("input", () => {
+        this.name = nameInput.value.trim();
+        const check = validateCharacterName(nameInput.value);
+        nameInput.classList.toggle("invalid", !check.valid);
+        if (nameError) nameError.textContent = check.error ?? "";
+        this.updateEnterState();
+      });
       nameInput.addEventListener("change", () => {
         this.name = nameInput.value.trim();
-        if (this.name) {
+        const check = validateCharacterName(nameInput.value);
+        if (check.valid && this.name) {
           // The name seeds the look (deterministic): same name, same base.
           this.draft = applyClassPreset(generateGenomeFromName(this.name), this.draft.classId);
           this.syncControls();
@@ -260,11 +332,13 @@ export class CharacterCreator {
     const genderM = $("creator-gender-m");
     genderF?.addEventListener("click", () => {
       this.draft.gender = "f";
+      void this.loadGlbPreview("f");
       this.syncControls();
       this.rebuild();
     });
     genderM?.addEventListener("click", () => {
       this.draft.gender = "m";
+      void this.loadGlbPreview("m");
       this.syncControls();
       this.rebuild();
     });
@@ -369,6 +443,7 @@ export class CharacterCreator {
     });
     $("creator-export")?.addEventListener("click", () => void this.exportGLB());
     $("creator-enter")?.addEventListener("click", () => {
+      if (!this.classChosen || !validateCharacterName(this.name).valid) return;
       if (!validateGenome(this.draft)) return;
       saveGenome(this.draft);
       const result: CreatorResult = { genome: this.draft, name: this.name };
@@ -376,6 +451,20 @@ export class CharacterCreator {
       this.resolve?.(result);
       this.resolve = null;
     });
+  }
+
+  /** "Entrar no mundo" só habilita com classe escolhida + nome válido (3–16). */
+  private updateEnterState(): void {
+    const enter = document.getElementById("creator-enter") as HTMLButtonElement | null;
+    if (!enter) return;
+    const nameOk = validateCharacterName(this.name).valid;
+    enter.disabled = !this.classChosen || !nameOk;
+    enter.title =
+      !this.classChosen
+        ? "Escolha uma classe primeiro"
+        : !nameOk
+          ? "Digite um nome válido (3–16 caracteres)"
+          : "Salvar e entrar no jogo";
   }
 
   private async exportGLB(): Promise<void> {
@@ -410,7 +499,11 @@ export class CharacterCreator {
     for (const b of document.querySelectorAll<HTMLButtonElement>("#creator-outfit .opt")) {
       b.classList.toggle("sel", b.dataset.value === this.draft.outfit.theme);
     }
+    for (const b of document.querySelectorAll<HTMLButtonElement>("#class-grid .class-card")) {
+      b.classList.toggle("sel", b.dataset.classId === this.draft.classId);
+    }
     $("creator-gender-f")?.classList.toggle("sel", this.draft.gender === "f");
     $("creator-gender-m")?.classList.toggle("sel", this.draft.gender === "m");
+    this.updateEnterState();
   }
 }

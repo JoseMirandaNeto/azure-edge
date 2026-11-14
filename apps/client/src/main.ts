@@ -23,6 +23,9 @@ import {
 import { GameClient } from "./net.js";
 import { WorldView } from "./render.js";
 import { CharacterCreator, loadSavedGenome } from "./creator.js";
+import "./hud.css";
+import { createHud, maxStatsFor, minimapMobsFromEntities, partyMembersFromEntities, type Hud } from "./hud.js";
+import { GameScreens } from "./screens.js";
 
 /**
  * M0 client: third-person movement + client-side prediction + reconciliation.
@@ -67,13 +70,33 @@ const statusEl = document.getElementById("status") as HTMLElement;
 const playerEl = document.getElementById("player") as HTMLElement;
 const debugEl = document.getElementById("debug") as HTMLElement;
 const appEl = document.getElementById("app") as HTMLElement;
-const hpFillEl = document.getElementById("hp-fill") as HTMLElement;
-const stFillEl = document.getElementById("st-fill") as HTMLElement;
-const mpFillEl = document.getElementById("mp-fill") as HTMLElement;
 const dmgLayerEl = document.getElementById("dmg-layer") as HTMLElement;
 
 const view = new WorldView(appEl);
 view.setCameraMode(cameraMode);
+
+/** Novo HUD (hud.ts) e telas/menus (screens.ts) — criados em startGame/boot. */
+let hud: Hud | null = null;
+let currentZoneId = "cidade_serket";
+let deathShown = false;
+const screens = new GameScreens({
+  version: "0.1.0",
+  serverLabel: "Render free",
+  getClassId: () => currentGenome?.classId ?? null,
+  getZoneId: () => currentZoneId,
+  getPlayerPosition: () => ({ x: predicted.x, y: predicted.y }),
+  getEquippedArmorId: () => currentArmorId,
+  onEquipArmor: (armorId) => {
+    currentArmorId = armorId;
+    view.setArmor(armorId);
+    hud?.setClass(currentGenome?.classId ?? "", armorId);
+  },
+  onReturnToStart: () => window.location.reload(),
+  onToggleHud: (visible) => {
+    const el = document.querySelector(".ae-hud") as HTMLElement | null;
+    if (el) el.style.display = visible ? "" : "none";
+  },
+});
 
 /** Selected class (from the genome at boot): chain, skill name, walk speed. */
 let classChain: ChainHit[] = [];
@@ -82,12 +105,10 @@ let walkSpeedMps = ZONE.player.walkSpeedMps;
 let currentArmorId: string | null = null;
 let zoneLabel = "Dunas de Serket";
 
-/** Loading splash (arte da Serket): some com fade quando o jogo está pronto. */
+/** Loading splash (arte da Serket): some com fade quando o jogo está pronto.
+ *  Delega para o GameScreens, que limpa o timer de dicas e o fade. */
 function hideLoading(): void {
-  const el = document.getElementById("loading");
-  if (!el || el.classList.contains("done")) return;
-  el.classList.add("done");
-  window.setTimeout(() => el.remove(), 700);
+  screens.hideLoading();
 }
 
 // --- Input state ---
@@ -213,6 +234,7 @@ function cycleArmor(): void {
   if (!next) return;
   currentArmorId = next.id;
   view.setArmor(next.id);
+  hud?.setClass(currentGenome?.classId ?? "", next.id);
   playerEl.textContent = `Armadura: ${next.name} (visual — bônus de +${next.bonus.maxHp} HP vale no próximo login)`;
 }
 
@@ -379,6 +401,8 @@ const client = new GameClient(serverUrl, simulatedLatencyMs, {
     remoteHistory.clear();
     statusEl.textContent = `Conectado — zona ${w.zoneId} · tick ${w.tickRate} Hz`;
     playerEl.textContent = `Você é o jogador #${w.playerId} · backend: ${view.backend}`;
+    hud?.setConnectionState("connected");
+    hud?.setZone(w.zoneId);
     hideLoading();
     const me = w.entities.find((e) => e.id === w.playerId);
     if (me) {
@@ -440,6 +464,8 @@ const client = new GameClient(serverUrl, simulatedLatencyMs, {
       spawnFloat(e.x, e.y, String(e.amount), e.crit ? "dmg-crit" : e.finisher === true ? "dmg-finisher" : "dmg-hit");
     } else if (e.type === "kill") {
       spawnFloat(e.x, e.y, "Abate!", "dmg-kill");
+      const mob = lastSnapshot?.entities.find((en) => en.id === e.targetId);
+      if (mob?.mobId) hud?.noteKill(mob.mobId);
     } else if (e.type === "parry") {
       spawnFloat(e.x, e.y, "PARRY!", "dmg-parry");
       view.addShake(0.05);
@@ -459,10 +485,12 @@ const client = new GameClient(serverUrl, simulatedLatencyMs, {
     // (the swing arc fades out over 80 ms).
     if (["state", "stamina", "mana", "cooldown", "skill"].includes(reason)) {
       cancelLocalVisual();
+      hud?.clearSkillCooldown(classById(currentGenome?.classId ?? "")?.skillId ?? "");
     }
   },
   onClose() {
     hideLoading();
+    hud?.setConnectionState("disconnected");
     statusEl.textContent = "Desconectado do servidor — recarregue a página.";
   },
 });
@@ -579,6 +607,7 @@ function frame(now: number): void {
     pendingSkill = false;
     lastSkillSent = true;
     startLocalSkill();
+    hud?.startSkillCooldown(classById(currentGenome?.classId ?? "")?.skillId ?? "");
   }
   if (guardHeld && localVisual.state === "idle") {
     localVisual.state = "guard";
@@ -658,12 +687,30 @@ function frame(now: number): void {
       }
     }
     updateMobBars(now, lastSnapshot.entities);
-    // HUD bars from the local snapshot entity (server-authoritative values).
+    // HUD (server-authoritative values) + tela de morte quando o HP zera.
     const me = lastSnapshot.entities.find((e) => e.id === playerId);
     if (me) {
-      hpFillEl.style.width = `${me.hpPct}%`;
-      stFillEl.style.width = `${me.staminaPct ?? 100}%`;
-      mpFillEl.style.width = `${me.manaPct ?? 100}%`;
+      if (me.hpPct <= 0 && !deathShown) {
+        deathShown = true;
+        window.dispatchEvent(new CustomEvent("ae:show-death", { detail: { respawnSeconds: 5 } }));
+      } else if (me.hpPct > 0 && deathShown) {
+        deathShown = false;
+        window.dispatchEvent(new CustomEvent("ae:hide-death"));
+      }
+    }
+    if (me && hud) {
+      hud.update({
+        hpPct: me.hpPct,
+        manaPct: me.manaPct ?? 100,
+        staminaPct: me.staminaPct ?? 100,
+        mana: ((me.manaPct ?? 100) / 100) * maxStatsFor(currentGenome?.classId ?? "", currentArmorId).maxMana,
+        playerX: displayX,
+        playerY: displayY,
+        playerYaw: predicted.yaw,
+        pingMs: client.rttMs,
+        party: partyMembersFromEntities(lastSnapshot.entities, playerId),
+        mobs: minimapMobsFromEntities(lastSnapshot.entities, displayX, displayY),
+      });
     }
   }
   updateFloats(now);
@@ -714,6 +761,23 @@ async function startGame(genome: CharacterGenome, name: string): Promise<void> {
   const zone = paramZone ? zoneById(paramZone) : undefined;
   const zoneId = dungeon ? undefined : (zone?.zone.id ?? "cidade_serket");
   zoneLabel = dungeon ? dungeon.name : (zone?.zone.name ?? "Cidade de Serket");
+  currentZoneId = zoneId ?? dungeon?.id ?? "cidade_serket";
+  // Novo HUD: remove o HUD antigo do index.html e constrói o novo.
+  // A barra de ajuda antiga (#help) também sai — ela ficava por baixo da
+  // hotbar e do chat novos; os controles estão na tela de configurações.
+  screens.showLoading();
+  screens.setLoadingStage(0, 0.5);
+  document.getElementById("hud")?.remove();
+  document.getElementById("help")?.remove();
+  hud = createHud(document.body, {
+    playerName: name,
+    classId: genome.classId,
+    armorId: currentArmorId,
+    zoneId: currentZoneId,
+    onSkill: () => {
+      pendingSkill = true;
+    },
+  });
   view.setCharMode(charMode);
   await view.init(zoneId, dungeon?.id);
   view.setArmor(currentArmorId);
@@ -728,6 +792,7 @@ async function startGame(genome: CharacterGenome, name: string): Promise<void> {
     void view.loadGlbMaleCharacter(GLB_MALE_URL);
   }
   playerEl.textContent = `backend: ${view.backend} · servidor ${serverUrl}`;
+  screens.setLoadingStage(2, 1);
   client.connect(playerName, {
     classId: genome.classId,
     ...(currentArmorId ? { armorId: currentArmorId } : {}),
@@ -746,6 +811,7 @@ document.getElementById("btn-personagem")?.addEventListener("click", () => {
     currentGenome = result.genome;
     playerName = result.name || playerName;
     classLabel = classById(result.genome.classId)?.name ?? "Espadachim";
+    hud?.setClass(result.genome.classId);
     // setLocalGenome re-applies the GLB (with the new class/gender) when
     // the template is loaded; otherwise it rebuilds the CharForge mesh.
     view.setLocalGenome(result.genome);
@@ -766,7 +832,23 @@ async function boot(): Promise<void> {
   let genome = loadSavedGenome();
   let name = params.get("name") ?? "";
   const quickClass = paramClass ?? (charMode === "glb" ? classById("espadachim") : null);
-  if (quickClass && !genome) {
+  // Tela inicial (Jogar/Continuar) — exceto em deep links de teste/jogo rápido
+  // (?class=, ?char=warrior, ?creator=1), que entram direto como antes.
+  const quickPlay = Boolean(quickClass) || params.has("creator");
+  if (!quickPlay) {
+    // O splash de loading cobre a tela: sem escondê-lo, a tela inicial
+    // aparece por baixo e o botão Jogar não recebe o clique.
+    hideLoading();
+    const choice = await screens.showStart();
+    if (choice === "continue" && genome) {
+      // Usa o personagem salvo e pula o criador (fluxo abaixo preservado).
+    } else {
+      hideLoading(); // O criador cobre a tela; o splash não pode ficar por cima.
+      const result = await creator.show(null, name);
+      genome = result.genome;
+      name = result.name;
+    }
+  } else if (quickClass && !genome) {
     genome = applyClassPreset(generateGenome(20261112, { gender: paramGender }), quickClass.id as CharacterGenome["classId"]);
   } else if (!genome || params.has("creator")) {
     hideLoading(); // O criador cobre a tela; o splash não pode ficar por cima.

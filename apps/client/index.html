@@ -3,6 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/png" href="/assets/icon_corte_crescente.png" />
     <title>Azure Edge — M0</title>
     <style>
       html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1620; font-family: system-ui, sans-serif; }
@@ -68,8 +69,9 @@
       #loading .loading-overlay { position: absolute; left: 0; right: 0; bottom: 9%; display: flex; flex-direction: column; align-items: center; }
       #loading .loading-text { color: #ffe9b8; font-size: 18px; font-weight: 700; text-shadow: 0 1px 4px #000; }
       #loading .loading-bar { width: 280px; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.2); margin-top: 12px; overflow: hidden; }
-      #loading .loading-bar > div { height: 100%; width: 40%; border-radius: 3px; background: #ffb020; animation: loading-slide 1.2s ease-in-out infinite alternate; }
-      @keyframes loading-slide { from { margin-left: 0; } to { margin-left: 60%; } }
+      #loading .loading-bar > div { height: 100%; width: 0%; border-radius: 3px; background: linear-gradient(90deg, #2fae8f, #ffb020); transition: width 0.25s ease; }
+      #loading .loading-stage { color: #eaf6ff; font-size: 13px; margin-top: 10px; text-shadow: 0 1px 4px #000; }
+      #loading .loading-tip { color: #9db8cc; font-size: 12px; margin-top: 6px; max-width: 420px; text-align: center; text-shadow: 0 1px 4px #000; line-height: 1.5; }
       /* HUD: slot da skill (M2: só o Espadachim é jogável — Q = Corte Crescente). */
       #skill-slot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
       #skill-slot img { width: 44px; height: 44px; border-radius: 8px; border: 1px solid #2a4a63; }
@@ -83,11 +85,14 @@
       <img src="/assets/loading_serket.jpg" alt="Azure Edge — Serket" onerror="this.style.display='none'" />
       <div class="loading-overlay">
         <div class="loading-text">Carregando…</div>
-        <div class="loading-bar"><div></div></div>
+        <div class="loading-bar"><div id="loading-fill"></div></div>
+        <div class="loading-stage" id="loading-stage"></div>
+        <div class="loading-tip" id="loading-tip"></div>
       </div>
     </div>
     <div id="app"></div>
     <div id="dmg-layer"></div>
+    <div id="screens-root"></div>
     <div id="hud">Azure Edge — M1 · Dunas de Serket<br /><b id="status">Conectando…</b><br /><span id="player"></span>
       <div id="bars">
         <div class="bar"><div id="hp-fill"></div></div>
@@ -110,8 +115,9 @@
           <h2 id="creator-title">Customize seu personagem</h2>
           <button id="creator-back" class="btn" type="button">← Trocar classe</button>
           <h3>Nome</h3>
-          <input id="creator-name" type="text" maxlength="24" placeholder="Nome do personagem" />
-          <p class="muted">O nome define a aparência inicial (mesmo nome, mesma base).</p>
+          <input id="creator-name" type="text" maxlength="16" placeholder="Nome do personagem" />
+          <p class="field-error" id="creator-name-error" role="alert"></p>
+          <p class="muted">O nome define a aparência inicial (mesmo nome, mesma base). 3–16 caracteres.</p>
           <h3>Gênero</h3>
           <div class="gender-row">
             <button id="creator-gender-f" class="opt" type="button">Feminino</button>
@@ -136,7 +142,7 @@
       </div>
     </div>
     <div id="debug"></div>
-    <div id="help">WASD mover · clique captura o mouse, mova para orbitar a câmera (ESC libera) · <b>LMB</b> ataque · <b>Espaço</b> esquiva · <b>RMB</b> guarda · <b>Q</b> Corte Crescente · <b>F3</b> painel de debug · <b>?latency=100</b> simula 100 ms de ping</div>
+    <div id="help">WASD mover · clique captura o mouse, mova para orbitar a câmera (ESC libera) · <b>LMB</b> ataque · <b>Espaço</b> esquiva · <b>RMB</b> guarda · <b>Q</b> Corte Crescente · <b>I</b> inventário · <b>K</b> skills · <b>M</b> mapa · <b>Esc</b> pausa · <b>F3</b> painel de debug · <b>?latency=100</b> simula 100 ms de ping</div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
