@@ -56,7 +56,7 @@ describe("charforge mesh builder", () => {
         }
       }
     }
-    for (const classId of ["espadachim", "guardiao", "atirador", "clerigo"] as const) {
+    for (const classId of ["espadachim", "guerreiro", "atirador", "curandeiro"] as const) {
       const b = buildCharacter(applyClassPreset(generateGenome(5), classId), 0);
       expect(b.drawCalls).toBe(4);
     }

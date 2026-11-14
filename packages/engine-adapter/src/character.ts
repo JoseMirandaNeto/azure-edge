@@ -275,7 +275,7 @@ export function buildCharacter(genome: CharacterGenome, lod: CharacterLod = 0): 
   if (g.classId === "espadachim") {
     sword(handX, 1);
     sword(-handX, -1);
-  } else if (g.classId === "guardiao") {
+  } else if (g.classId === "guerreiro") {
     sword(handX, 1);
     weapons.push(paint(xg(new THREE.CylinderGeometry(0.28, 0.28, 0.03, S(20)), [-handX, handY + 0.1, 0.05], [Math.PI / 2, 0, 0.3]), pal[0]));
     weapons.push(paint(xg(new THREE.SphereGeometry(0.07, S(10), S(8)), [-handX, handY + 0.1, 0.02], [0, 0, 0], [1, 1, 0.5]), pal[2]));
@@ -284,7 +284,7 @@ export function buildCharacter(genome: CharacterGenome, lod: CharacterLod = 0): 
     weapons.push(paint(xg(new THREE.CylinderGeometry(0.02, 0.02, 0.3, S(8)), [0, handY + 0.12, -0.28], [Math.PI / 2 - 0.2, 0, 0]), grip));
     weapons.push(paint(xg(new THREE.BoxGeometry(0.07, 0.12, 0.25), [0, handY + 0.05, 0.05], [0.2, 0, 0]), "#6b4a2f"));
   } else {
-    // clerigo: staff + orb
+    // curandeiro: staff + orb
     weapons.push(paint(xg(new THREE.CylinderGeometry(0.02, 0.025, 1.5, S(8)), [handX, handY + 0.5, -0.05], [0.1, 0, 0.1]), "#6b4a2f"));
     weapons.push(paint(xg(new THREE.SphereGeometry(0.06, S(12), S(8)), [handX + 0.08, handY + 1.25, -0.12]), pal[2]));
   }

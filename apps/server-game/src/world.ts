@@ -1,4 +1,4 @@
-import { CLASSES, ZONE, classById, mobById, skillById, type ClassData, type MobData } from "@azure-edge/gamedata";
+import { CLASSES, ZONE, armorById, classById, dungeonById, mobById, skillById, zoneById, type ArmorData, type ClassData, type DungeonData, type MobData } from "@azure-edge/gamedata";
 import {
   AnimState,
   BASE_CRIT_CHANCE,
@@ -56,6 +56,9 @@ export interface PlayerEntity extends SimState {
   kind: "player";
   name: string;
   classId: string;
+  /** Swappable armor set id (visual + small maxHp bonus). */
+  armorId: string | null;
+  gender: "f" | "m";
   atk: number;
   def: number;
   combat: Combatant;
@@ -91,6 +94,8 @@ export interface MobEntity {
   mobId: string;
   name: string;
   data: MobData;
+  /** Dungeon level scaling (1 = base stats, see scaleMobStats). */
+  level: number;
   x: number;
   y: number;
   yaw: number;
@@ -113,13 +118,33 @@ export interface MobEntity {
 
 const SUB_STEPS_PER_TICK = 3;
 const FRAME_DT_S = 1 / 60;
-/** Player class for M1 (no class select yet — Espadachim is the test class). */
-const M1_CLASS_ID = "espadachim";
+/** Default class (Espadachim) when the client sends no/invalid ?class=. */
+const DEFAULT_CLASS_ID = "espadachim";
+/** Open zones (dunas/cidade) cap: the 200-bot perf test needs >= 200 slots.
+ *  Dungeons pass maxPlayers: 8 (see dungeons.json). */
+const DEFAULT_MAX_PLAYERS = 256;
+/** Mob level scaling: +15% HP and +8% ATQ per level above 1. */
+const MOB_HP_PER_LEVEL = 0.15;
+const MOB_ATK_PER_LEVEL = 0.08;
 /** Fallback class (gamedata guarantees >= 1 class; fail loud otherwise). */
 function firstClass(): ClassData {
   const c = CLASSES[0];
   if (!c) throw new Error("gamedata has no classes");
   return c;
+}
+
+/** Level-scaled mob stats (dungeons lv 5-20 reuse the M1 mobs). */
+export function scaleMobStats(
+  data: MobData,
+  level: number,
+  hpMult = 1,
+  atkMult = 1,
+): { maxHp: number; atk: number } {
+  const lvl = Math.max(1, Math.floor(level));
+  return {
+    maxHp: Math.round(data.maxHp * (1 + MOB_HP_PER_LEVEL * (lvl - 1)) * hpMult),
+    atk: Math.round(data.atk * (1 + MOB_ATK_PER_LEVEL * (lvl - 1)) * atkMult),
+  };
 }
 
 
@@ -137,11 +162,23 @@ function animFor(state: CombatState): number {
   }
 }
 
+export interface ZoneWorldOptions {
+  /** Zone/instance id (dunas_serket | cidade_serket | tumbas | templo). */
+  zoneId?: string;
+  /** Hard player cap — dungeons use 8 (dungeons.json maxPlayers). */
+  maxPlayers?: number;
+  /** Deterministic RNG seed (default 20261111). */
+  seed?: number;
+}
+
 export class ZoneWorld {
   readonly tickRate = 20;
   tick = 0;
   /** Logical 60 fps frame counter (3 per tick). */
   frame = 0;
+  /** Zone/instance this world simulates. */
+  readonly zoneId: string;
+  readonly maxPlayers: number;
   readonly players = new Map<number, PlayerEntity>();
   /** Mobs live in a separate id space (10000+). */
   readonly mobs = new Map<number, MobEntity>();
@@ -150,7 +187,7 @@ export class ZoneWorld {
   private nextEventId = 1;
   private events: Array<CombatEvent & { eventId: number }> = [];
   /** Seeded RNG for crit/variance — deterministic per world seed. */
-  private readonly rng = sfc32(20261111);
+  private rng = sfc32(20261111);
   /** Tick duration stats (ms) for the F3 / metrics log. */
   tickMsLast = 0;
   tickMsMax = 0;
@@ -158,23 +195,63 @@ export class ZoneWorld {
   private tickCount = 0;
   private tickMsSamples: number[] = [];
 
-  addPlayer(name: string): PlayerEntity {
+  constructor(opts: ZoneWorldOptions = {}) {
+    this.zoneId = opts.zoneId ?? ZONE.zone.id;
+    this.maxPlayers = opts.maxPlayers ?? DEFAULT_MAX_PLAYERS;
+    if (opts.seed !== undefined) this.rng = sfc32(opts.seed >>> 0);
+  }
+
+  /** True when the instance is at its player cap (the next join is refused). */
+  isFull(): boolean {
+    return this.players.size >= this.maxPlayers;
+  }
+
+  /** Zone size (m) for bounds — per-zone, falls back to the legacy ZONE. */
+  zoneSizeM(): number {
+    return zoneById(this.zoneId)?.zone.sizeM ?? ZONE.zone.sizeM;
+  }
+
+  zoneSpawn(): { x: number; y: number } {
+    const s = zoneById(this.zoneId)?.zone.spawn ?? ZONE.zone.spawn;
+    return { x: s.x, y: s.y };
+  }
+
+  addPlayer(
+    name: string,
+    opts: { classId?: string; armorId?: string; gender?: string } = {},
+  ): PlayerEntity {
+    if (this.isFull()) {
+      throw new Error(`instance full: ${this.zoneId} allows at most ${this.maxPlayers} players`);
+    }
     const id = this.nextId;
     this.nextId += 1;
-    const cls = classById(M1_CLASS_ID) ?? firstClass();
+    const cls = classById(opts.classId ?? "") ?? classById(DEFAULT_CLASS_ID) ?? firstClass();
+    // Armor must belong to the chosen class; invalid ids fall back to none.
+    const armor: ArmorData | undefined =
+      opts.armorId !== undefined ? armorById(opts.armorId) : undefined;
+    const armorOk = armor !== undefined && armor.classId === cls.id ? armor : undefined;
+    const gender: "f" | "m" = opts.gender === "m" ? "m" : "f";
+    // Armor bonus (armors.json): tier 1 +0, tier 2/3 add maxHp/atk/def/mana.
+    const maxHp = cls.base.maxHp + (armorOk?.bonus.maxHp ?? 0);
+    const atk = cls.base.atk + (armorOk?.bonus.atk ?? 0);
+    const def = cls.base.def + (armorOk?.bonus.def ?? 0);
+    const mana = cls.base.mana + (armorOk?.bonus.mana ?? 0);
     // Deterministic spawn ring around the zone spawn — no Math.random.
     const angle = (id - 1) * 2.399963; // golden angle
     const radius = 1.5 + (id - 1) * 0.5;
+    const spawn = this.zoneSpawn();
     const p: PlayerEntity = {
       id,
       kind: "player",
       name: name || `Player${id}`,
       classId: cls.id,
-      atk: cls.base.atk,
-      def: cls.base.def,
-      combat: createCombatant(cls.base.maxHp, cls.base.stamina, cls.base.mana, 40),
-      x: ZONE.zone.spawn.x + Math.cos(angle) * radius,
-      y: ZONE.zone.spawn.y + Math.sin(angle) * radius,
+      armorId: armorOk?.id ?? null,
+      gender,
+      atk,
+      def,
+      combat: createCombatant(maxHp, cls.base.stamina, mana, 40),
+      x: spawn.x + Math.cos(angle) * radius,
+      y: spawn.y + Math.sin(angle) * radius,
       yaw: 0,
       moving: false,
       lastSeq: 0,
@@ -200,24 +277,38 @@ export class ZoneWorld {
 
   // --- Mobs ---
 
-  /** Spawn one mob of a data-driven type at an anchor point. */
-  spawnMob(mobId: string, anchorX: number, anchorY: number): MobEntity | null {
+  /**
+   * Spawn one mob of a data-driven type at an anchor point, scaled to
+   * `level` (dungeon scaling; level 1 = base stats). Bosses pass
+   * `nameOverride` + hp/atk multipliers from dungeons.json.
+   */
+  spawnMob(
+    mobId: string,
+    anchorX: number,
+    anchorY: number,
+    level = 1,
+    nameOverride?: string,
+    hpMult = 1,
+    atkMult = 1,
+  ): MobEntity | null {
     const data = mobById(mobId);
     if (!data) return null;
     const id = this.nextMobId;
     this.nextMobId += 1;
+    const scaled = scaleMobStats(data, level, hpMult, atkMult);
     const m: MobEntity = {
       id,
       kind: "mob",
       mobId,
-      name: data.name,
+      name: nameOverride ?? data.name,
       data,
+      level: Math.max(1, Math.floor(level)),
       x: anchorX,
       y: anchorY,
       yaw: 0,
-      combat: createCombatant(data.maxHp, 100, 0, data.poise),
+      combat: createCombatant(scaled.maxHp, 100, 0, data.poise),
       def: data.def,
-      atk: data.atk,
+      atk: scaled.atk,
       aiState: "patrol",
       anchorX,
       anchorY,
@@ -258,9 +349,31 @@ export class ZoneWorld {
     for (const [id, x, y] of mix) this.spawnMob(id, x, y);
   }
 
+  /** Dungeon encounters from dungeons.json: trash mobs + boss (scaled). */
+  spawnDungeonMobs(dungeonId: string): MobEntity[] {
+    const d: DungeonData | undefined = dungeonById(dungeonId);
+    if (!d) return [];
+    const out: MobEntity[] = [];
+    let i = 0;
+    for (const spec of d.mobs) {
+      for (let n = 0; n < spec.count; n += 1) {
+        const angle = i * 2.399963;
+        const radius = 8 + (i % 5) * 5;
+        const m = this.spawnMob(spec.mobId, Math.cos(angle) * radius, Math.sin(angle) * radius, spec.level);
+        if (m) out.push(m);
+        i += 1;
+      }
+    }
+    const boss = this.spawnMob(
+      d.boss.mobId, 0, -20, d.boss.level, d.boss.name, d.boss.hpMult, d.boss.atkMult,
+    );
+    if (boss) out.push(boss);
+    return out;
+  }
+
   /**
-   * Provocação (Guardião): mobs in radius redirect to the taunting player
-   * for durationS. The cast itself arrives with the Guardião (M3); the
+   * Provocação (Guerreiro): mobs in radius redirect to the taunting player
+   * for durationS. The cast itself is the Guerreiro skill (Q); the
    * mob-side reaction is implemented and tested here.
    */
   tauntMobs(playerId: number, radiusM: number, durationS: number): void {
@@ -291,7 +404,7 @@ export class ZoneWorld {
   private pickPatrolPoint(m: MobEntity): void {
     const angle = this.rng() * Math.PI * 2;
     const radius = 4 + this.rng() * 16;
-    const half = ZONE.zone.sizeM / 2 - 2;
+    const half = this.zoneSizeM() / 2 - 2;
     m.patrolX = Math.max(-half, Math.min(half, m.anchorX + Math.cos(angle) * radius));
     m.patrolY = Math.max(-half, Math.min(half, m.anchorY + Math.sin(angle) * radius));
   }
@@ -552,10 +665,21 @@ export class ZoneWorld {
       dmgMult = 1 - GUARD_DAMAGE_REDUCTION;
       finalPoise = poiseDmg * dmgMult;
     }
+    // Bênção Solar: active buff reduces incoming damage.
+    if (t.kind === "player" && c.buffDamageReduction > 0 && this.frame < c.buffUntilFrame) {
+      dmgMult *= 1 - c.buffDamageReduction;
+    }
     const crit = rollCrit(this.rng, BASE_CRIT_CHANCE);
     const bonus = comboStateBonus(c.state, c.comboHits);
     const dmg = Math.max(1, Math.round(damageAmount(source.atk, mult, t.def, crit, rollVariance(this.rng), bonus) * dmgMult));
-    c.hp = Math.max(0, c.hp - dmg);
+    // Temp HP (Provocação) absorbs damage before real HP.
+    if (t.kind === "player" && c.tempHp > 0) {
+      const absorbed = Math.min(c.tempHp, dmg);
+      c.tempHp -= absorbed;
+      c.hp = Math.max(0, c.hp - (dmg - absorbed));
+    } else {
+      c.hp = Math.max(0, c.hp - dmg);
+    }
     c.comboHits += 1;
     c.lastHitFrame = this.frame;
     this.emit({ kind: "hit", sourceId: source.id, targetId: t.id, amount: dmg, crit, finisher, x: t.x, y: t.y });
@@ -611,7 +735,7 @@ export class ZoneWorld {
   }
 
   private pushBack(t: { x: number; y: number; extraM: number }, yaw: number, distM: number): void {
-    const half = ZONE.zone.sizeM / 2;
+    const half = this.zoneSizeM() / 2;
     t.x = Math.max(-half, Math.min(half, t.x + Math.sin(yaw) * distM));
     t.y = Math.max(-half, Math.min(half, t.y + Math.cos(yaw) * distM));
     t.extraM += distM;
@@ -667,7 +791,7 @@ export class ZoneWorld {
         p.x = before.x;
         p.y = before.y;
       }
-      const half = ZONE.zone.sizeM / 2;
+      const half = this.zoneSizeM() / 2;
       p.x = Math.max(-half, Math.min(half, p.x));
       p.y = Math.max(-half, Math.min(half, p.y));
       delete p._before;
@@ -691,8 +815,9 @@ export class ZoneWorld {
           c.poise = c.poiseMax;
           c.state = "idle";
           c.stateFrame = 0;
-          p.x = ZONE.zone.spawn.x;
-          p.y = ZONE.zone.spawn.y;
+          const spawn = this.zoneSpawn();
+          p.x = spawn.x;
+          p.y = spawn.y;
         } else {
           continue;
         }
@@ -702,6 +827,8 @@ export class ZoneWorld {
       c.stamina = Math.min(c.maxStamina, c.stamina + (20 / 60));
       c.mana = Math.min(c.maxMana, c.mana + (MANA_REGEN_PER_S / 60));
       c.poise = Math.min(c.poiseMax, c.poise + (5 / 60));
+      // Buff expiry (Bênção Solar): reduction ends when the window passes.
+      if (c.buffDamageReduction > 0 && this.frame >= c.buffUntilFrame) c.buffDamageReduction = 0;
       if (this.frame - c.lastHitFrame > 120) c.comboHits = 0;
       // Buffered action (150 ms): consume when the state allows it.
       if (p.buffered && this.frame <= p.buffered.expiresFrame) {
@@ -770,9 +897,28 @@ export class ZoneWorld {
                   w.shape.radius ?? 2.5, w.shape.angle ?? 140,
                   w.hit.mult ?? 1, w.hit.poise ?? 0, false, w.hit.effect,
                 );
+              } else if (skill.kind === "taunt" && skill.taunt) {
+                // Provocação (Guerreiro): redirect mobs + temp HP, once per cast.
+                const key = `taunt:${w.from}`;
+                if (!p.hitDone.has(key)) {
+                  p.hitDone.add(key);
+                  c.tempHp += skill.taunt.tempHp;
+                  this.tauntMobs(p.id, skill.taunt.radiusM, skill.taunt.durationS);
+                }
+              } else if (skill.kind === "buff" && skill.buff) {
+                // Bênção Solar (Curandeiro): protection buff + small heal, once.
+                const key = `buff:${w.from}`;
+                if (!p.hitDone.has(key)) {
+                  p.hitDone.add(key);
+                  c.buffDamageReduction = skill.buff.damageReduction;
+                  c.buffUntilFrame = this.frame + Math.round(skill.buff.durationS * 60);
+                  const healed = Math.min(w.hit.heal ?? 0, c.maxHp - c.hp);
+                  if (healed > 0) {
+                    c.hp += healed;
+                    this.emit({ kind: "heal", sourceId: p.id, targetId: p.id, amount: healed, crit: false, x: p.x, y: p.y });
+                  }
+                }
               }
-              // kind "taunt"/"buff": applied by tauntMobs/applyBuff (mobs commit);
-              // unreachable in M1 (only the Espadachim damage skill is castable).
             }
           }
           if (c.stateFrame >= activeEnd + skill.recovery) {
@@ -978,6 +1124,9 @@ export class ZoneWorld {
       id: p.id,
       kind: "player" as const,
       name: p.name,
+      classId: p.classId,
+      ...(p.armorId ? { armorId: p.armorId } : {}),
+      gender: p.gender,
       x: p.x,
       y: p.y,
       yaw: p.yaw,
@@ -993,6 +1142,7 @@ export class ZoneWorld {
         kind: "mob" as const,
         name: m.name,
         mobId: m.mobId,
+        level: m.level,
         x: m.x,
         y: m.y,
         yaw: m.yaw,

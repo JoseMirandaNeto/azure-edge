@@ -28,6 +28,15 @@ export interface HelloPayload {
   clientBuild: string;
   /** Optional display name; server assigns the playerId. */
   name?: string;
+  /** Class pick (?class=guerreiro|atirador|curandeiro|espadachim). Server validates. */
+  classId?: string;
+  /** Armor set id (?armor=...). Server validates + applies the bonus. */
+  armorId?: string;
+  /** Gender for the silhouette (?gender=f|m). */
+  gender?: string;
+  /** Zone pick (?zone=cidade_serket|dunas_serket) or dungeon (?dungeon=tumbas|templo). */
+  zoneId?: string;
+  dungeonId?: string;
 }
 
 export interface InputPayload {
@@ -54,6 +63,12 @@ export interface EntityState {
   name?: string;
   /** Mob type id (mobs only) so the client can pick color/scale. */
   mobId?: string;
+  /** Mob level (dungeon scaling) shown in the HUD. */
+  level?: number;
+  /** Player class / armor / gender (players only) for weapon + visual. */
+  classId?: string;
+  armorId?: string;
+  gender?: string;
   x: number;
   y: number;
   /** Facing yaw, radians. */

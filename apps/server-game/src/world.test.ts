@@ -331,3 +331,143 @@ describe("ZoneWorld (authoritative)", () => {
     expect(w.tickMsP99()).toBeLessThan(10);
   });
 });
+
+describe("vertical slice: classes, armor, instances, dungeons", () => {
+  it("class select gives distinct base stats (tank / ranged / support / melee)", () => {
+    const w = new ZoneWorld();
+    const esp = w.addPlayer("E", { classId: "espadachim" });
+    const gue = w.addPlayer("G", { classId: "guerreiro" });
+    const ati = w.addPlayer("A", { classId: "atirador" });
+    const cur = w.addPlayer("C", { classId: "curandeiro" });
+    expect(gue.combat.maxHp).toBeGreaterThan(esp.combat.maxHp); // tank
+    expect(ati.atk).toBeGreaterThan(cur.atk); // ranged damage
+    expect(cur.combat.maxMana).toBeGreaterThan(gue.combat.maxMana); // support
+    expect(w.addPlayer("X", { classId: "inexistente" }).classId).toBe("espadachim"); // invalid -> default
+  });
+
+  it("armor set grants its documented bonus; wrong-class or unknown armor is ignored", () => {
+    const w = new ZoneWorld();
+    const a = w.addPlayer("A", { classId: "espadachim", armorId: "espadachim_dourada" });
+    expect(a.combat.maxHp).toBe(120); // 100 + 20
+    expect(a.atk).toBe(24); // 10 + 14
+    expect(a.armorId).toBe("espadachim_dourada");
+    const b = w.addPlayer("B", { classId: "espadachim", armorId: "guerreiro_solar" });
+    expect(b.combat.maxHp).toBe(100); // wrong class: ignored
+    expect(b.armorId).toBeNull();
+    const c = w.addPlayer("C", { classId: "curandeiro", armorId: "curandeiro_solar" });
+    expect(c.combat.maxMana).toBe(240); // 140 + 100
+  });
+
+  it("8-player instance cap: the 9th join is refused", () => {
+    const w = new ZoneWorld({ zoneId: "tumbas", maxPlayers: 8 });
+    for (let i = 0; i < 8; i += 1) w.addPlayer(`P${i}`);
+    expect(w.isFull()).toBe(true);
+    expect(() => w.addPlayer("P9")).toThrow(/instance full/);
+    w.removePlayer(1);
+    expect(w.isFull()).toBe(false);
+    expect(w.addPlayer("P9").name).toBe("P9"); // a freed slot admits again
+  });
+
+  it("Guerreiro Provocação (Q): taunts the mob + grants 30 temp HP that absorbs damage", () => {
+    const w = new ZoneWorld();
+    const a = w.addPlayer("A"); // espadachim at (0,0)
+    a.x = 0;
+    a.y = 0;
+    const b = w.addPlayer("B", { classId: "guerreiro" });
+    b.x = 20;
+    b.y = 20;
+    const mob = w.spawnMob("escorpiao", 0, 8);
+    for (let i = 0; i < 10; i += 1) w.step();
+    expect(mob?.targetId).toBe(a.id); // aggro on the near player first
+    b.x = 0;
+    b.y = 4; // inside the 10 m taunt radius
+    w.applyInput(b.id, input(1, 0, 1)); // Q = Provocação
+    for (let i = 0; i < 8; i += 1) w.step();
+    expect(b.combat.tempHp).toBe(30);
+    expect(b.combat.mana).toBeLessThan(60); // cost 20
+    expect(mob?.targetId).toBe(b.id); // taunt overrides proximity
+    // Temp HP absorbs the next hit: A attacks B point-blank.
+    a.x = 0;
+    a.y = 2;
+    a.yaw = 0; // facing B at (0,4)
+    b.combat.state = "idle";
+    w.applyInput(a.id, input(2, 1));
+    for (let i = 0; i < 6; i += 1) w.step();
+    expect(b.combat.hp).toBe(b.combat.maxHp); // no real damage
+    expect(b.combat.tempHp).toBeLessThan(30); // absorbed part of the hit
+  });
+
+  it("Atirador Disparo Rápido (Q): two shots, two hits (two active windows)", () => {
+    const w = new ZoneWorld();
+    const a = w.addPlayer("A", { classId: "atirador" });
+    const b = w.addPlayer("B");
+    a.x = 0;
+    a.y = 0;
+    a.yaw = 0;
+    b.x = 0;
+    b.y = 2;
+    w.applyInput(a.id, input(1, 0, 1)); // Q = Disparo Rápido
+    for (let i = 0; i < 8; i += 1) w.step();
+    const hits = w.drainEvents().filter((e) => e.kind === "hit" && e.targetId === b.id);
+    expect(hits).toHaveLength(2);
+    expect(b.combat.hp).toBeLessThan(85); // ~10 dmg per shot
+    expect(a.combat.mana).toBeLessThan(80); // cost 15
+  });
+
+  it("Curandeiro Bênção Solar (Q): heals 20 + 30% protection buff that expires", () => {
+    const w = new ZoneWorld();
+    const c = w.addPlayer("C", { classId: "curandeiro" });
+    c.combat.hp = 50;
+    w.applyInput(c.id, input(1, 0, 1)); // Q = Bênção Solar
+    for (let i = 0; i < 8; i += 1) w.step();
+    expect(c.combat.hp).toBe(70); // +20 heal
+    expect(c.combat.buffDamageReduction).toBe(0.3);
+    expect(c.combat.buffUntilFrame).toBeGreaterThan(w.frame);
+    expect(w.drainEvents().some((e) => e.kind === "heal" && e.amount === 20)).toBe(true);
+    // Buffed hit: a basic attack deals at most 9 (crit, buffed) instead of up to 13.
+    const a = w.addPlayer("A");
+    a.x = 0;
+    a.y = 0;
+    a.yaw = 0;
+    c.x = 0;
+    c.y = 2;
+    c.combat.state = "idle";
+    w.applyInput(a.id, input(2, 1));
+    for (let i = 0; i < 6; i += 1) w.step();
+    expect(70 - c.combat.hp).toBeLessThanOrEqual(9);
+    // After 8 s the buff is gone.
+    for (let i = 0; i < 170; i += 1) w.step();
+    expect(c.combat.buffDamageReduction).toBe(0);
+  });
+
+  it("dungeon mobs scale with level; spawnDungeonMobs includes the boss", () => {
+    const w = new ZoneWorld({ zoneId: "tumbas", maxPlayers: 8 });
+    const m12 = w.spawnMob("mumia", 0, 0, 12);
+    expect(m12?.combat.maxHp).toBe(318); // 120 * (1 + 0.15 * 11)
+    expect(m12?.level).toBe(12);
+    const m1 = w.spawnMob("mumia", 5, 5, 1);
+    expect(m1?.combat.maxHp).toBe(120); // level 1 = base stats
+    const spawned = w.spawnDungeonMobs("tumbas");
+    expect(spawned).toHaveLength(11); // 4 múmias + 4 formigas + 2 besouros + boss
+    const boss = spawned.find((m) => m.name.includes("Neferet"));
+    expect(boss?.mobId).toBe("neferet");
+    expect(boss?.level).toBe(12);
+    expect(boss?.combat.maxHp).toBeGreaterThan(300);
+    const templo = new ZoneWorld({ zoneId: "templo", maxPlayers: 8 });
+    const serket = templo.spawnDungeonMobs("templo").find((m) => m.mobId === "serket");
+    expect(serket?.name).toMatch(/Serket/);
+    expect(serket?.level).toBe(20);
+  });
+
+  it("snapshot carries class/armor/gender for players and level for mobs", () => {
+    const w = new ZoneWorld();
+    const p = w.addPlayer("A", { classId: "guerreiro", armorId: "guerreiro_solar", gender: "m" });
+    const mob = w.spawnMob("escorpiao", 3, 3, 5);
+    const snap = w.snapshot();
+    const me = snap.find((e) => e.id === p.id);
+    expect(me?.classId).toBe("guerreiro");
+    expect(me?.armorId).toBe("guerreiro_solar");
+    expect(me?.gender).toBe("m");
+    expect(snap.find((e) => e.id === mob?.id)?.level).toBe(5);
+  });
+});

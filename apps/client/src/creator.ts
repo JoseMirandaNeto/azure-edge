@@ -30,9 +30,9 @@ export const GENOME_STORAGE_KEY = "azure-edge:genome:v1";
 /** Approved skill icon per skill id (mix final do Jose; runtime assets em public/assets). */
 const SKILL_ICONS: Record<string, string> = {
   espadachim_corte_crescente: "/assets/icon_corte_crescente.png",
-  guardiao_provocacao: "/assets/icon_provocacao.png",
+  guerreiro_provocacao: "/assets/icon_provocacao.png",
   atirador_disparo_rapido: "/assets/icon_disparo_rapido.png",
-  clerigo_bencao_solar: "/assets/icon_bencao_solar.png",
+  curandeiro_bencao_solar: "/assets/icon_bencao_solar.png",
 };
 
 export function loadSavedGenome(): CharacterGenome | null {
@@ -222,7 +222,7 @@ export class CharacterCreator {
         card.type = "button";
         card.innerHTML =
           (icon ? `<img class="class-icon" src="${icon}" alt="Ícone de ${skill}" />` : "") +
-          `<b>${cls.name}</b>${cls.id !== "espadachim" ? ' <span class="soon">M3 · em breve</span>' : ""}<br />` +
+          `<b>${cls.name}</b><br />` +
           `<span>${cls.role} · ${cls.weapon}</span><br /><span>Skill: ${skill}</span>`;
         card.addEventListener("click", () => {
           this.draft = applyClassPreset(this.draft, cls.id as ClassId);
@@ -235,7 +235,7 @@ export class CharacterCreator {
       const note = document.getElementById("class-note");
       if (note) {
         note.textContent =
-          "No M2, só o Espadachim é jogável — as outras classes definem o visual do personagem e entram no M3. A classe escolhida define corpo e roupa iniciais.";
+          "As 4 classes são jogáveis — Guerreiro, Atirador, Curandeiro e Espadachim. A classe escolhida define corpo e roupa iniciais.";
       }
     }
 

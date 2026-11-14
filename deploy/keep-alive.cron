@@ -1,0 +1,29 @@
+# keep-alive — crontab para manter o server-game acordado no Render free
+#
+# O Render free dorme após 15 min sem tráfego. Um ping a cada 10 min em
+# /healthz impede o sleep. Este arquivo é SÓ o modelo: nada aqui está
+# ativo. Duas formas de ativar (escolha UMA):
+#
+#   A) UptimeRobot gratuito (RECOMENDADO — zero manutenção, sem máquina
+#      ligada): crie uma conta grátis em https://uptimerobot.com, crie
+#      um monitor HTTP(s) para https://<seu-servico>.onrender.com/healthz
+#      com intervalo de 5 minutos. Plano free (verificado nov/2026):
+#      50 monitores, checks a cada 5 min, sem cartão. O monitor também
+#      serve de alerta de queda (email). Não precisa deste cron.
+#
+#   B) Cron no Muse (o assistente agenda o ping): crie um cron job que
+#      rode a cada 10 min:
+#        node apps/tools/keep-alive.mjs --url https://<seu-servico>.onrender.com
+#      Ou, se o cron roda num servidor com curl, a linha abaixo. Troque
+#      <seu-servico> pela URL real do Render DEPOIS do deploy.
+#
+# ORÇAMENTO: um serviço sempre acordado consome ~720 h/mês das 750 h
+# grátis do workspace Render. Com UM serviço free, cabe. Com 2+ serviços
+# free com keep-alive, as horas acabam antes do fim do mês e o Render
+# suspende TODOS os serviços free até o mês seguinte. Ver DEPLOY.md.
+#
+# Linha cron (B, com curl — edite a URL e descomente para usar):
+# */10 * * * * curl -fsS -o /dev/null -w "%{http_code}\n" https://<seu-servico>.onrender.com/healthz
+#
+# Checagem completa (servidor + client + WebSocket) — rode após o deploy:
+#   node apps/tools/check-deploy.mjs --server https://<seu-servico>.onrender.com --client https://<site>.netlify.app --ws

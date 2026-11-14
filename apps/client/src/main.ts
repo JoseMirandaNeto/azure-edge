@@ -1,5 +1,5 @@
-import { ZONE, classById, skillById } from "@azure-edge/gamedata";
-import { generateGenome, type CharacterGenome } from "@azure-edge/charforge";
+import { ZONE, armorById, armorsForClass, classById, skillById, zoneById, dungeonById, type ChainHit } from "@azure-edge/gamedata";
+import { applyClassPreset, generateGenome, type CharacterGenome } from "@azure-edge/charforge";
 import {
   REMOTE_INTERP_BUFFER_MS,
   chainActiveRange,
@@ -9,6 +9,7 @@ import {
   hitStopFrames,
   interpolateRemote,
   isInCancelWindow,
+  parseCameraMode,
   reconcilePrediction,
   stepMovement,
   type EventPayload,
@@ -30,6 +31,15 @@ import { CharacterCreator, loadSavedGenome } from "./creator.js";
 
 const params = new URLSearchParams(window.location.search);
 const simulatedLatencyMs = Number(params.get("latency") ?? 0) || 0;
+/** Vertical slice: `?class=guerreiro|atirador|curandeiro|espadachim`
+ *  (default espadachim), `?gender=f|m`, `?armor=<id>`, `?zone=cidade_serket|dunas_serket`,
+ *  `?dungeon=tumbas|templo`, `?camera=2.5d|3d` (default 2.5d). */
+const paramClass = classById(params.get("class") ?? "") ?? null;
+const paramGender: "f" | "m" = params.get("gender") === "m" ? "m" : "f";
+const paramArmor = params.get("armor") ?? null;
+const paramZone = params.get("zone") ?? null;
+const paramDungeon = params.get("dungeon") ?? null;
+const cameraMode = parseCameraMode(params.get("camera"));
 /** M2.5 test: `?char=warrior` renders the rigged GLB character instead of
  * the CharForge procedural build (skips the creator, Espadachim by default). */
 const useGlbCharacter = params.get("char") === "warrior";
@@ -57,6 +67,14 @@ const mpFillEl = document.getElementById("mp-fill") as HTMLElement;
 const dmgLayerEl = document.getElementById("dmg-layer") as HTMLElement;
 
 const view = new WorldView(appEl);
+view.setCameraMode(cameraMode);
+
+/** Selected class (from the genome at boot): chain, skill name, walk speed. */
+let classChain: ChainHit[] = [];
+let skillName = "Corte Crescente";
+let walkSpeedMps = ZONE.player.walkSpeedMps;
+let currentArmorId: string | null = null;
+let zoneLabel = "Dunas de Serket";
 
 /** Loading splash (arte da Serket): some com fade quando o jogo está pronto. */
 function hideLoading(): void {
@@ -68,6 +86,7 @@ function hideLoading(): void {
 
 // --- Input state ---
 const keys = new Set<string>();
+/** 2.5D: fixed camera, yaw stays 0 (W = screen-up/north). 3D: orbit yaw. */
 let cameraYaw = 0;
 /** Orbit elevation: default preserves the M0 framing (heightM above ground). */
 const PITCH_MIN = 0.05;
@@ -103,6 +122,7 @@ window.addEventListener("keydown", (e) => {
     if (!e.repeat) pendingDodge = true;
   }
   if (e.code === "KeyQ" && !e.repeat) pendingSkill = true;
+  if (e.code === "KeyT" && !e.repeat) cycleArmor();
   keys.add(e.code);
 });
 window.addEventListener("keyup", (e) => keys.delete(e.code));
@@ -113,15 +133,18 @@ appEl.addEventListener("pointerdown", (e) => {
   lastPointerX = e.clientX;
   pointerDownX = e.clientX;
   pointerDownY = e.clientY;
-  // First click captures the mouse (pointer lock) for mouse-look; if the
-  // lock is refused/unavailable, dragging still rotates the camera.
-  if (!view.isPointerLocked()) {
+  // First click captures the mouse (pointer lock) for mouse-look in 3D mode;
+  // in 2.5D there is no orbit, so no lock is requested. If the lock is
+  // refused/unavailable, dragging still rotates the camera (3D only).
+  if (cameraMode === "3d" && !view.isPointerLocked()) {
     view.requestPointerLock();
     suppressNextAttack = true;
   }
   if (e.button === 2) guardHeld = true;
 });
 window.addEventListener("pointermove", (e) => {
+  // 2.5D: no orbit — the camera is fixed; only the wheel zooms.
+  if (cameraMode === "2.5d") return;
   if (view.isPointerLocked()) {
     // Mouse-look: horizontal orbits the camera, vertical raises/lowers it.
     cameraYaw -= e.movementX * 0.005;
@@ -132,6 +155,11 @@ window.addEventListener("pointermove", (e) => {
   cameraYaw -= (e.clientX - lastPointerX) * 0.005;
   lastPointerX = e.clientX;
 });
+appEl.addEventListener("wheel", (e) => {
+  if (cameraMode !== "2.5d") return;
+  e.preventDefault();
+  view.setZoom25D(view.zoom25DValue + Math.sign(e.deltaY));
+}, { passive: false });
 window.addEventListener("pointerup", (e) => {
   // LMB click (no drag) = attack; drag = camera. The click that locked the
   // pointer does not attack.
@@ -161,8 +189,26 @@ function readMove(): { moveX: number; moveY: number } {
 // --- Local visual combat (prediction only — the server is authoritative) ---
 // The client starts the swing/dodge/skill visuals immediately on input and
 // rolls them back (80 ms fade) if the server rejects the action.
-const ESPADACHIM_CHAIN = (classById("espadachim")?.basicChain ?? []);
-const SKILL_NAME = skillById("espadachim_corte_crescente")?.name ?? "Corte Crescente";
+function setClassCombat(classId: string): void {
+  const cls = classById(classId);
+  classChain = cls?.basicChain ?? [];
+  skillName = skillById(cls?.skillId ?? "")?.name ?? "Skill";
+  walkSpeedMps = cls?.base.walkSpeedMps ?? ZONE.player.walkSpeedMps;
+}
+
+/** Cycle the armor sets of the current class (T): visual only in-session —
+ *  the server maxHp bonus comes from the ?armor= used at join time. */
+function cycleArmor(): void {
+  if (!currentGenome) return;
+  const sets = armorsForClass(currentGenome.classId);
+  if (sets.length === 0) return;
+  const idx = sets.findIndex((a) => a.id === currentArmorId);
+  const next = sets[(idx + 1) % sets.length];
+  if (!next) return;
+  currentArmorId = next.id;
+  view.setArmor(next.id);
+  playerEl.textContent = `Armadura: ${next.name} (visual — bônus de +${next.bonus.maxHp} HP vale no próximo login)`;
+}
 
 interface LocalVisual {
   state: "idle" | "attack" | "dodge" | "guard" | "skill";
@@ -174,9 +220,9 @@ interface LocalVisual {
 let localVisual: LocalVisual = { state: "idle", frame: 0, chain: 0, dodgeDirX: 0, dodgeDirY: 1 };
 
 function startLocalAttack(): void {
-  const chain = ESPADACHIM_CHAIN[localVisual.chain];
+  const chain = classChain[localVisual.chain];
   if (localVisual.state === "attack" && chain && isInCancelWindow(chain, localVisual.frame)) {
-    localVisual.chain = Math.min(localVisual.chain + 1, ESPADACHIM_CHAIN.length - 1);
+    localVisual.chain = Math.min(localVisual.chain + 1, classChain.length - 1);
     localVisual.frame = 0;
   } else if (localVisual.state === "idle") {
     localVisual.chain = 0;
@@ -331,7 +377,8 @@ const client = new GameClient(serverUrl, simulatedLatencyMs, {
     const me = w.entities.find((e) => e.id === w.playerId);
     if (me) {
       predicted = { x: me.x, y: me.y, yaw: me.yaw, moving: false };
-      cameraYaw = me.yaw;
+      // 2.5D: fixed camera, yaw stays 0 (W = north); 3D: orbit follows the spawn yaw.
+      if (cameraMode === "3d") cameraYaw = me.yaw;
     }
   },
   onSnapshot(snap: SnapshotPayload) {
@@ -357,7 +404,7 @@ const client = new GameClient(serverUrl, simulatedLatencyMs, {
       authoritative,
       unacked,
       snap.ackSeq,
-      ZONE.player.walkSpeedMps,
+      walkSpeedMps,
     );
     if (result.teleport) {
       predicted = result.corrected;
@@ -394,7 +441,7 @@ const client = new GameClient(serverUrl, simulatedLatencyMs, {
       spawnFloat(e.x, e.y, "ESQUIVA PERFEITA!", "dmg-perfect");
       slowMoUntil = performance.now() + 120;
     } else if (e.type === "skill") {
-      if (e.sourceId === playerId) spawnFloat(e.x, e.y, `${SKILL_NAME}!`, "dmg-skill");
+      if (e.sourceId === playerId) spawnFloat(e.x, e.y, `${skillName}!`, "dmg-skill");
     } else if (e.type === "heal") {
       spawnFloat(e.x, e.y, `+${e.amount}`, "dmg-heal");
     }
@@ -452,7 +499,7 @@ function frame(now: number): void {
           localVisual.frame = 0;
         }
       } else if (localVisual.state === "attack") {
-        const hit = ESPADACHIM_CHAIN[localVisual.chain];
+        const hit = classChain[localVisual.chain];
         if (hit) {
           const [a0, a1] = chainActiveRange(hit);
           if (localVisual.frame >= a0 && localVisual.frame < a1) {
@@ -477,9 +524,13 @@ function frame(now: number): void {
       } else if (localVisual.state === "guard") {
         // Guard is stationary; no walk prediction while held.
       } else {
-        predicted = stepMovement(predicted, { moveX, moveY, yaw: cameraYaw }, step, ZONE.player.walkSpeedMps);
+        predicted = stepMovement(predicted, { moveX, moveY, yaw: cameraYaw }, step, walkSpeedMps);
+        // 2.5D: face the movement direction (fixed camera, no orbit yaw).
+        if (cameraMode === "2.5d" && predicted.moving) {
+          predicted.yaw = Math.atan2(moveX, moveY);
+        }
       }
-      lastInput = { seq, tick, moveX, moveY, yaw: cameraYaw, buttons: 0, skillId: 0 };
+      lastInput = { seq, tick, moveX, moveY, yaw: cameraMode === "2.5d" ? predicted.yaw : cameraYaw, buttons: 0, skillId: 0 };
     }
     if (acc > 0.25) acc = 0; // don't spiral after a hit-stop / tab switch
   }
@@ -558,7 +609,7 @@ function frame(now: number): void {
           localVisual.state === "guard" ? 4 :
           localVisual.state === "skill" ? 5 :
           predicted.moving ? 1 : 0;
-        shown = { ...e, x: displayX, y: displayY, yaw: cameraYaw, animState: localAnim };
+        shown = { ...e, x: displayX, y: displayY, yaw: cameraMode === "2.5d" ? predicted.yaw : cameraYaw, animState: localAnim };
       } else {
         const interp = interpolateRemote(remoteHistory.get(e.id) ?? [], renderTimeMs);
         shown = interp
@@ -607,8 +658,9 @@ function frame(now: number): void {
       `players: ${lastSnapshot?.entities.filter((e) => e.kind === "player").length ?? 0}  mobs: ${mobs.length}  server tick: ${lastSnapshot?.serverTick ?? "-"}\n` +
       `pos: ${displayX.toFixed(1)}, ${displayY.toFixed(1)}  seq: ${seq}  corr: ${Math.hypot(corrX, corrY).toFixed(2)}\n` +
       `classe: ${classLabel}  estado: ${localVisual.state}${localVisual.state === "attack" ? ` golpe ${localVisual.chain + 1}` : ""}  hp: ${me?.hpPct ?? "-"}%\n` +
-      `alvo: ${nearest ? `${nearest.m.name ?? "mob"} hp ${nearest.m.hpPct}% a ${nearest.d.toFixed(1)} m` : "-"}\n` +
-      `controles: LMB ataque · Espaço esquiva · RMB guarda · Q ${SKILL_NAME} · WASD mover`;
+      `zona: ${zoneLabel}  câmera: ${cameraMode}  armadura: ${currentArmorId ?? "-"} (T troca)\n` +
+      `alvo: ${nearest ? `${nearest.m.name ?? "mob"}${nearest.m.level ? ` nv ${nearest.m.level}` : ""} hp ${nearest.m.hpPct}% a ${nearest.d.toFixed(1)} m` : "-"}\n` +
+      `controles: LMB ataque · Espaço esquiva · RMB guarda · Q ${skillName} · T armadura · WASD mover${cameraMode === "2.5d" ? " · roda zoom" : ""}`;
   }
 }
 
@@ -621,7 +673,20 @@ async function startGame(genome: CharacterGenome, name: string): Promise<void> {
   currentGenome = genome;
   playerName = name;
   classLabel = classById(genome.classId)?.name ?? "Espadachim";
-  await view.init();
+  setClassCombat(genome.classId);
+  // Armor: ?armor= wins when it belongs to the class; otherwise tier 1.
+  const armor = paramArmor ? armorById(paramArmor) : undefined;
+  currentArmorId =
+    armor && armor.classId === genome.classId
+      ? armor.id
+      : (armorsForClass(genome.classId)[0]?.id ?? null);
+  // Zone: ?dungeon= wins over ?zone=; default is the city (lv 1-20 hub).
+  const dungeon = paramDungeon ? dungeonById(paramDungeon) : undefined;
+  const zone = paramZone ? zoneById(paramZone) : undefined;
+  const zoneId = dungeon ? undefined : (zone?.zone.id ?? "cidade_serket");
+  zoneLabel = dungeon ? dungeon.name : (zone?.zone.name ?? "Cidade de Serket");
+  await view.init(zoneId, dungeon?.id);
+  view.setArmor(currentArmorId);
   if (useGlbCharacter) {
     const ok = await view.useGlbCharacter(GLB_CHARACTER_URL);
     if (!ok) view.setLocalGenome(genome);
@@ -629,7 +694,13 @@ async function startGame(genome: CharacterGenome, name: string): Promise<void> {
     view.setLocalGenome(genome);
   }
   playerEl.textContent = `backend: ${view.backend} · servidor ${serverUrl}`;
-  client.connect(playerName);
+  client.connect(playerName, {
+    classId: genome.classId,
+    ...(currentArmorId ? { armorId: currentArmorId } : {}),
+    gender: genome.gender,
+    ...(zoneId ? { zoneId } : {}),
+    ...(dungeon ? { dungeonId: dungeon.id } : {}),
+  });
   view.renderer.setAnimationLoop((time: number) => frame(time));
 }
 
@@ -650,17 +721,26 @@ document.getElementById("btn-personagem")?.addEventListener("click", () => {
  * (class first, then customization); otherwise straight into the zone.
  * `?char=warrior` skips the creator (default Espadachim genome) and loads
  * the rigged GLB character instead of the CharForge build.
+ * `?class=` / `?gender=` override the genome in-memory (no save) so the
+ * vertical slice can be tested straight from a URL.
  */
 async function boot(): Promise<void> {
   let genome = loadSavedGenome();
   let name = params.get("name") ?? "";
-  if (useGlbCharacter && !genome) {
-    genome = generateGenome(20261112);
+  const quickClass = paramClass ?? (useGlbCharacter ? classById("espadachim") : null);
+  if (quickClass && !genome) {
+    genome = applyClassPreset(generateGenome(20261112, { gender: paramGender }), quickClass.id as CharacterGenome["classId"]);
   } else if (!genome || params.has("creator")) {
     hideLoading(); // O criador cobre a tela; o splash não pode ficar por cima.
     const result = await creator.show(genome, name);
     genome = result.genome;
     name = result.name;
+  }
+  if (paramClass && genome) {
+    genome = applyClassPreset(genome, paramClass.id as CharacterGenome["classId"]);
+  }
+  if (params.has("gender") && genome) {
+    genome = { ...genome, gender: paramGender };
   }
   if (!name) name = `Player-${crypto.randomUUID().slice(0, 4)}`;
   await startGame(genome, name);

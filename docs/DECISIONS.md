@@ -146,3 +146,98 @@ Formato: `ADR-00N | data | contexto | decisão | alternativas | consequências`.
   lockfile já tinha uma divergência pré-existente (root `@types/node`
   fora do lockfile), então `--frozen-lockfile` falha por motivo anterior
   ao M2.
+## ADR-008 | 2026-11-13 | Apresentação 2.5D: câmera oblíqua fixa 3D (não sprites 2D)
+
+- **Contexto**: pedido do Jose (2026-11-13): MMORPG hack-and-slash **2.5D em browser**,
+  com o visual anime semi-realista de Vindictus/Cabal/Aika. Havia duas leituras
+  possíveis: (a) sprites 2D com câmera lateral/top-down; (b) mundo 3D com câmera
+  oblíqua fixa — o "2.5D" dos action-RPGs isométricos. A decisão precisava
+  reaproveitar M0–M2 (Three.js WebGPU/WebGL2, servidor autoritativo 20 Hz,
+  CharForge, base TRELLIS2) em vez de descartá-los.
+- **Decisão**: **câmera oblíqua fixa 3D**: personagens e cenário 3D (Three.js,
+  como hoje), câmera em ângulo alto (~35°, pitch ≈ −0,6 rad, distância 8–10 m),
+  sem rotação livre — rotação opcional em 4 ângulos de 90° (Q/E) como
+  concessão, nunca câmera livre de 3ª pessoa. Movimento em plano (WASD),
+  mira assistida em cone (COMBAT_SPEC), hitboxes 3D no servidor sem mudança.
+  O "2.5D" é apresentação: legibilidade de horda + leitura de telegraphs no
+  chão, não uma troca de tecnologia.
+- **Alternativas**: sprites 2D (descartada — exigiria spritesheet por
+  animação × classe × gênero × armadura, descartaria CharForge e o rig
+  Mixamo, e o custo de produção por animação é maior que o 3D já pronto);
+  câmera livre de 3ª pessoa (descartada — pior legibilidade com 10–30 mobs,
+  mais custo de culling/sombra, e o pedido era 2.5D); top-down puro
+  (descartado — esconde o personagem, que é o centro do jogo).
+- **Consequências / riscos**: a câmera do M0 (pitch −0,35 rad, distância 7 m,
+  3ª pessoa) vira modo de transição; o alvo 2.5D chega em M3 com pitch e
+  distância novos em `zones.json`/`camera` (ainda não implementado — o dado
+  atual é o do M0). Risco: ângulo fixo esconde o que está atrás de paredes —
+  mitigação: paredes baixas/fachadas abertas na cidade e nas dungeons,
+  e fade de oclusores acima do jogador. Orçamentos de performance (AGENTS.md
+  §6) não mudam.
+
+## ADR-009 | 2026-11-13 | Personagens híbridos: CharForge procedural + base TRELLIS2 como heroína
+
+- **Contexto**: personagens adultos, anime semi-realista, 4 classes com
+  armaduras trocáveis e efeitos distintos, orçamento zero. Havia três
+  métodos: (a) gerar malha do zero por ruído/IA por personagem; (b) base
+  procedural pura (CharForge M2); (c) híbrido.
+- **Decisão**: **híbrido**. (1) **CharForge procedural** continua o sistema:
+  genoma (morphs corpo/rosto), kit modular de cabelos/roupas/armaduras,
+  seed determinística, LODs — é o que anima, customiza e escala para
+  milhares de jogadores. (2) A malha **TRELLIS2 `base_s20261221`**
+  (47.436 tris após voxel-remesh, 0 furos, 0 non-manifold, 2,8 MB) vira a
+  **base feminina heroína** e a referência de proporções do kit — não uma
+  malha gerada por jogador. (3) **Kits modulares de armadura por classe**
+  (3 conjuntos por classe em `armors.json`) vestem a mesma base sobre o
+  esqueleto humanoide único (~65 ossos, alvo Mixamo); cosmético separado
+  de stat (transmog, GDD §7).
+- **Alternativas**: malha do zero por ruído/IA por personagem (descartada —
+  evidência medida: TRELLIS2 nunca define dedos nas mãos; a barra do
+  vestido sai esgarçada/rendada; voxel-remesh destrói a topologia para UV
+  e rig — Cube Projection contorna a textura, não a topologia; gerar por
+  ruído a cada personagem seria pior e não-determinístico); só procedural
+  (descartado como único — o visual primitivo do M2 fica abaixo do alvo
+  Vindictus; a base TRELLIS2 eleva o patamar sem custo).
+- **Consequências / riscos — limites honestos**: mãos sem dedos (esconder
+  com manoplas/luvas, como na guerreira); barra do vestido esgarçada
+  (aceitar como renda ou cobrir com sobreposição de tecido); rosto no clay
+  parece "filme de terror" sem textura (a textura normaliza — não é defeito
+  de malha); 256 ossos do Rigify estouram o orçamento (≤70) — o rig da
+  base nova precisa ser Mixamo (~65 ossos), ainda pendente. A base
+  TRELLIS2 **não está no repo** (vive em `~/workspace/meshes/`) — importar
+  para `assets/` com licença/origem documentada é trabalho de M3.
+
+## ADR-010 | 2026-11-13 | Renome das classes, cidade lv 1–20 e 2 instâncias de 8 jogadores
+
+- **Contexto**: pedido do Jose (2026-11-13) com liberdade total: 4 classes
+  Guerreiro, Atirador, Curandeiro, Espadachim; 1 cidade inicial com lore
+  lv 1–20; 2 instâncias com limite de 8 jogadores. O GDD anterior usava
+  Guardião/Clérigo, dungeon de 4 jogadores (M5) e a Vila Lótus como hub.
+- **Decisão**: (1) **Renome**: Guardião → **Guerreiro**, Clérigo →
+  **Curandeiro** (ids `guerreiro`/`curandeiro`); Espadachim e Atirador
+  inalterados. Skills do M1 preservadas com os ids renomeados
+  (`guerreiro_provocacao`, `curandeiro_bencao_solar`); cada classe agora
+  tem **4 skills** em `skills.json`. (2) **Cidade inicial: Cidade de
+  Serket** (id `cidade_serket`, lv 1–20, segura) — sucede a Vila Lótus
+  como hub (o nome antigo vira lore: a vila cresceu ao redor do oásis e
+  virou cidade; a Praça do Oásis mantém o motivo do lótus). Lore, 5
+  distritos, 8 NPCs e 12 quests encadeadas em `city.json` +
+  `docs/CIDADE_LV1_20.md`. (3) **2 instâncias de 8 jogadores**:
+  Tumbas Soterradas (lv 5–12, lockout 8 h) e Templo de Serket (lv 13–20,
+  lockout 24 h), em `dungeons.json` + `docs/INSTANCIAS.md`; o loop de
+  dungeon passa de 4 para **8 jogadores** (party de campo continua 4).
+  (4) Modelo de dados: `zones.json` (espacial), `city.json` (lore/quests),
+  `armors.json` (3 conjuntos por classe), `dungeons.json` (encontros +
+  loot + lockout) — validados em `packages/gamedata`.
+- **Alternativas**: manter Guardião/Clérigo (descartada — o pedido renomeia
+  explicitamente); manter dungeon de 4 (descartada — o pedido fixa 8, e
+  8 encaixa no boss Serket com mecânicas de grupo); criar a cidade como
+  zona nova separada da Vila Lótus (descartada — duplicaria o hub).
+- **Consequências / riscos**: testes e docs antigos que citavam
+  Guardião/Clérigo/4 jogadores foram atualizados (GDD §4–§5, ROADMAP M3/M5,
+  `gamedata`); saves/personagens antigos com `classId` guardião/clerigo
+  precisam de migração em M4 (mapeamento 1:1, sem perda de progresso).
+  O boss Serket ganhou mob próprio (`serket`, 9.000 HP) e Neferet
+  (`neferet`, 4.500 HP) em `mobs.json` — números de boss para 8 jogadores,
+  a balancear em playtest (M3).
+

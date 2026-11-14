@@ -12,15 +12,16 @@ Máquina de estados, ataque 4 golpes, esquiva, guarda, hit-stop, hitboxes server
 Base mesh F/M, 20 morphs corpo + 20 rosto, 6 cabelos, 6 roupas, shader anime, criador de personagem, seed determinística, LODs, exporte GLB.
 **Aceite**: 1000 seeds sem erro; ≤6 draw calls/personagem; LOD0 ≤60k tris; revisão de arte (adultos, sem nudez).
 
-## M3 — Classes e Skills (3 semanas)
-Blade + Warden completas (8 skills cada), árvore de skills, agarrar/arremessar, bosses (1), HUD completo, gamepad.
+## M3 — Classes, Cidade lv 1–20 e Instâncias de 8 (3–4 semanas)
+**Redefinido em 2026-11-13 (ADR-008/009/010; o M3 antigo falava em "Blade + Warden" e dungeon de 4 — substituído):** 4 classes com nomes finais — **Guerreiro, Atirador, Curandeiro, Espadachim** — cada uma com 4 skills data-driven (16 no total, `skills.json`), stats base + crescimento por nível (`classes.json`), 3 conjuntos de armadura por classe com efeito visual distinto (`armors.json`, cosmético separado de stat). **Câmera 2.5D** (oblíqua fixa ~35°, ADR-008). **Cidade de Serket lv 1–20** (5 distritos, 8 NPCs, 12 quests encadeadas, `city.json` + `docs/CIDADE_LV1_20.md`). **2 instâncias de 8 jogadores** — Tumbas Soterradas (lv 5–12, lockout 8 h) e Templo de Serket (lv 13–20, lockout 24 h, boss Serket) — com encontros telegrafados, loot e lockout (`dungeons.json` + `docs/INSTANCIAS.md`). Personagens híbridos (ADR-009): base TRELLIS2 `base_s20261221` importada para `assets/` + rig Mixamo (~65 ossos). Agarrar/arremessar, HUD completo, gamepad.
+**Aceite**: as 4 classes jogáveis com as 16 skills; cidade navegável com as 12 quests completáveis; as 2 instâncias limpáveis por grupo de 8; câmera 2.5D com telegraphs legíveis; ≤6 draw calls/personagem; LOD0 ≤60k tris.
 
 ## M4 — MMO Base (4 semanas)
 Contas, personagens (Postgres), zonas persistentes, interest management, chat, party, inventário/equip, loot, NPC/quests simples, WebTransport.
 **Aceite**: bots: 200 jogadores/zona, tick p99 ≤10 ms, ≤20 KB/s por client.
 
 ## M5 — Dungeon e Endgame (4 semanas)
-Dungeon instanciada de 4 jogadores com boss de 3 fases, refino, mercado, guild básica.
+Instâncias de **8 jogadores** (o modelo de M3) com bosses de 3 fases, refino, mercado, guild básica. (O texto antigo deste milestone falava em "dungeon instanciada de 4 jogadores" — atualizado para 8 em 2026-11-13, ADR-010.)
 
 ## M6 — Mundo e Conteúdo (6+ semanas)
 3 zonas, montaria, Arqueira e Mística, eventos, ranking, localização (pt-BR/en/ko/ja).

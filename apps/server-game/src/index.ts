@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
-import { ZONE } from "@azure-edge/gamedata";
+import { DUNGEONS, ZONE, dungeonById, zoneById } from "@azure-edge/gamedata";
 import {
   decodeMessages,
   encodeMessage,
@@ -19,9 +19,26 @@ import { ZoneWorld } from "./world.js";
 const PORT = Number(process.env.PORT ?? 3001);
 const HOST = process.env.HOST ?? "0.0.0.0";
 
-const world = new ZoneWorld();
-world.spawnArenaMobs(); // M1 arena: escorpião (principal) + formiga, besouro, múmia
-const clients = new Map<WebSocket, { playerId: number; buffer: Buffer }>();
+/**
+ * One world per zone/instance. Open zones (dunas, cidade) share the default
+ * cap; dungeons (tumbas, templo) cap at 8 players (dungeons.json) — the
+ * 9th join is refused with "instance full".
+ */
+const worlds = new Map<string, ZoneWorld>();
+function makeWorld(zoneId: string, maxPlayers?: number): ZoneWorld {
+  const w = new ZoneWorld({ zoneId, ...(maxPlayers !== undefined ? { maxPlayers } : {}) });
+  worlds.set(zoneId, w);
+  return w;
+}
+const dunas = makeWorld(ZONE.zone.id);
+dunas.spawnArenaMobs(); // Dunas de Serket: escorpião (principal) + formiga, besouro, múmia
+makeWorld("cidade_serket"); // Cidade inicial lv 1-20: safe zone, sem mobs
+for (const d of DUNGEONS) {
+  const w = makeWorld(d.id, d.maxPlayers);
+  w.spawnDungeonMobs(d.id);
+}
+
+const clients = new Map<WebSocket, { playerId: number; world: ZoneWorld; buffer: Buffer }>();
 
 function log(msg: string, fields: Record<string, unknown> = {}): void {
   // Structured-ish single-line log (pino is an M4 observability upgrade).
@@ -38,10 +55,13 @@ const httpServer = createServer((req, res) => {
       JSON.stringify({
         ok: true,
         service: "azure-edge-server-game",
-        zone: ZONE.zone.id,
-        tick: world.tick,
-        players: world.players.size,
-        mobs: world.mobs.size,
+        worlds: [...worlds.values()].map((w) => ({
+          zone: w.zoneId,
+          tick: w.tick,
+          players: w.players.size,
+          maxPlayers: w.maxPlayers,
+          mobs: w.mobs.size,
+        })),
       }),
     );
     return;
@@ -53,11 +73,27 @@ const httpServer = createServer((req, res) => {
 const wss = new WebSocketServer({ server: httpServer });
 
 httpServer.listen(PORT, HOST, () => {
-  log("server-game listening", { port: PORT, zone: ZONE.zone.id, tickHz: world.tickRate });
+  log("server-game listening", { port: PORT, zone: ZONE.zone.id, tickHz: dunas.tickRate });
 });
+
+/** Pick the world for a Hello: dungeon wins, then zone, then dunas. */
+function worldForHello(hello: HelloPayload): ZoneWorld | null {
+  if (hello.dungeonId) {
+    const d = dungeonById(hello.dungeonId);
+    if (!d) return null;
+    return worlds.get(d.id) ?? null;
+  }
+  if (hello.zoneId) {
+    const z = zoneById(hello.zoneId);
+    if (!z) return null;
+    return worlds.get(z.zone.id) ?? null;
+  }
+  return dunas;
+}
 
 wss.on("connection", (ws: WebSocket) => {
   let playerId: number | null = null;
+  let world: ZoneWorld | null = null;
   let buffer = Buffer.alloc(0);
 
   ws.on("message", (data: Buffer) => {
@@ -71,20 +107,42 @@ wss.on("connection", (ws: WebSocket) => {
           ws.close(1008, `protocol mismatch: want ${PROTOCOL_VERSION}`);
           return;
         }
-        const player = world.addPlayer(hello.name ?? "");
+        const target = worldForHello(hello);
+        if (!target) {
+          ws.close(1008, "unknown zone or dungeon");
+          return;
+        }
+        if (target.isFull()) {
+          ws.close(1008, `instance full: ${target.zoneId} allows at most ${target.maxPlayers} players (${target.players.size}/${target.maxPlayers})`);
+          log("join refused: instance full", { zone: target.zoneId, players: target.players.size });
+          return;
+        }
+        let player;
+        try {
+          // exactOptionalPropertyTypes: only pass keys that are present.
+          const joinOpts: { classId?: string; armorId?: string; gender?: string } = {};
+          if (hello.classId !== undefined) joinOpts.classId = hello.classId;
+          if (hello.armorId !== undefined) joinOpts.armorId = hello.armorId;
+          if (hello.gender !== undefined) joinOpts.gender = hello.gender;
+          player = target.addPlayer(hello.name ?? "", joinOpts);
+        } catch (err) {
+          ws.close(1008, err instanceof Error ? err.message : "join failed");
+          return;
+        }
         playerId = player.id;
-        clients.set(ws, { playerId, buffer });
+        world = target;
+        clients.set(ws, { playerId, world: target, buffer });
         const welcome: WelcomePayload = {
           playerId: player.id,
-          zoneId: ZONE.zone.id,
-          serverTick: world.tick,
-          tickRate: world.tickRate,
-          entities: world.snapshot(),
+          zoneId: target.zoneId,
+          serverTick: target.tick,
+          tickRate: target.tickRate,
+          entities: target.snapshot(),
         };
         ws.send(encodeMessage(MessageType.Welcome, welcome));
-        log("player joined", { playerId, name: player.name, players: world.players.size });
+        log("player joined", { playerId, name: player.name, zone: target.zoneId, classId: player.classId, players: target.players.size });
       } else if (type === MessageType.Input) {
-        if (playerId === null) return;
+        if (playerId === null || world === null) return;
         const input = payload as InputPayload;
         const res = world.applyInput(playerId, input);
         if (!res.ok && res.reason !== "stale seq") {
@@ -98,67 +156,69 @@ wss.on("connection", (ws: WebSocket) => {
   });
 
   ws.on("close", () => {
-    if (playerId !== null) {
+    if (playerId !== null && world !== null) {
       world.removePlayer(playerId);
       clients.delete(ws);
-      log("player left", { playerId, players: world.players.size });
+      log("player left", { playerId, zone: world.zoneId, players: world.players.size });
     }
   });
 
   ws.on("error", (err) => log("ws error", { error: String(err) }));
 });
 
-// Fixed 20 Hz tick + snapshot broadcast.
+// Fixed 20 Hz tick + snapshot broadcast, per world.
 setInterval(() => {
-  world.step();
-  // Combat rejects validated at step time (client rolls the visual back).
-  for (const r of world.drainRejects()) {
-    for (const [ws, info] of clients) {
-      if (info.playerId === r.playerId && ws.readyState === ws.OPEN) {
-        ws.send(encodeMessage(MessageType.Reject, { seq: r.seq, reason: r.reason }));
+  for (const world of worlds.values()) {
+    world.step();
+    // Combat rejects validated at step time (client rolls the visual back).
+    for (const r of world.drainRejects()) {
+      for (const [ws, info] of clients) {
+        if (info.world === world && info.playerId === r.playerId && ws.readyState === ws.OPEN) {
+          ws.send(encodeMessage(MessageType.Reject, { seq: r.seq, reason: r.reason }));
+        }
       }
     }
-  }
-  // Combat events (hit / kill / parry / perfect / skill / heal) for VFX/SFX.
-  const events = world.drainEvents();
-  for (const e of events) {
-    const payload: EventPayload = {
-      eventId: e.eventId,
-      type: e.kind,
-      sourceId: e.sourceId,
-      targetId: e.targetId,
-      amount: e.amount,
-      crit: e.crit,
-      x: e.x,
-      y: e.y,
-      ...(e.finisher !== undefined ? { finisher: e.finisher } : {}),
+    // Combat events (hit / kill / parry / perfect / skill / heal) for VFX/SFX.
+    const events = world.drainEvents();
+    for (const e of events) {
+      const payload: EventPayload = {
+        eventId: e.eventId,
+        type: e.kind,
+        sourceId: e.sourceId,
+        targetId: e.targetId,
+        amount: e.amount,
+        crit: e.crit,
+        x: e.x,
+        y: e.y,
+        ...(e.finisher !== undefined ? { finisher: e.finisher } : {}),
+      };
+      const bytes = encodeMessage(MessageType.Event, payload);
+      for (const [ws, info] of clients) {
+        if (info.world === world && ws.readyState === ws.OPEN) ws.send(bytes);
+      }
+    }
+    const snapshot: SnapshotPayload = {
+      serverTick: world.tick,
+      ackSeq: 0, // per-client ack is filled below
+      entities: world.snapshot(),
     };
-    const bytes = encodeMessage(MessageType.Event, payload);
-    for (const [ws] of clients) {
-      if (ws.readyState === ws.OPEN) ws.send(bytes);
+    for (const [ws, info] of clients) {
+      if (info.world !== world || ws.readyState !== ws.OPEN) continue;
+      const player = world.players.get(info.playerId);
+      const perClient: SnapshotPayload = {
+        ...snapshot,
+        ackSeq: player?.lastSeq ?? 0,
+      };
+      ws.send(encodeMessage(MessageType.Snapshot, perClient));
     }
   }
-  const snapshot: SnapshotPayload = {
-    serverTick: world.tick,
-    ackSeq: 0, // per-client ack is filled below
-    entities: world.snapshot(),
-  };
-  for (const [ws, info] of clients) {
-    if (ws.readyState !== ws.OPEN) continue;
-    const player = world.players.get(info.playerId);
-    const perClient: SnapshotPayload = {
-      ...snapshot,
-      ackSeq: player?.lastSeq ?? 0,
-    };
-    ws.send(encodeMessage(MessageType.Snapshot, perClient));
-  }
-  if (world.tick % 200 === 0) {
+  if (dunas.tick % 200 === 0) {
     log("tick metrics", {
-      tick: world.tick,
-      players: world.players.size,
-      tickMsLast: world.tickMsLast.toFixed(3),
-      tickMsAvg: world.tickMsAvg.toFixed(3),
-      tickMsMax: world.tickMsMax.toFixed(3),
+      tick: dunas.tick,
+      worlds: [...worlds.values()].map((w) => `${w.zoneId}:${w.players.size}p/${w.mobs.size}m`).join(" "),
+      tickMsLast: dunas.tickMsLast.toFixed(3),
+      tickMsAvg: dunas.tickMsAvg.toFixed(3),
+      tickMsMax: dunas.tickMsMax.toFixed(3),
     });
   }
 }, TICK_DT_S * 1000);

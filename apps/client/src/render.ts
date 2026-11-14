@@ -1,9 +1,16 @@
 import * as THREE from "three";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { MOBS, ZONE } from "@azure-edge/gamedata";
+import { MOBS, ZONE, armorById, zoneById, type ArmorData, type ZoneData } from "@azure-edge/gamedata";
 import { buildCharacter, disposeCharacter, type CharacterBuild } from "@azure-edge/engine-adapter";
 import type { CharacterGenome } from "@azure-edge/charforge";
-import { sfc32, type EntityState } from "@azure-edge/shared";
+import {
+  CAMERA_25D,
+  clampCamera25DZoom,
+  computeCamera25D,
+  sfc32,
+  type Camera25DMode,
+  type EntityState,
+} from "@azure-edge/shared";
 
 export type Backend = "webgpu" | "webgl2";
 
@@ -18,12 +25,63 @@ export interface RendererLike {
 
 const WORLD_TO_THREE = (x: number, y: number): [number, number, number] => [x, 0, -y];
 
-function terrainHeight(x: number, z: number): number {
+/** Placeholder weapon per class (geometric, distinct silhouette + color). */
+function makeWeapon(classId: string): THREE.Group {
+  const g = new THREE.Group();
+  const steel = new THREE.MeshStandardMaterial({ color: 0xc8ccd4, roughness: 0.35, metalness: 0.8 });
+  const grip = new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 0.9 });
+  const gold = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.4, metalness: 0.7 });
+  const holy = new THREE.MeshStandardMaterial({ color: 0xffe98a, roughness: 0.3, metalness: 0.2, emissive: 0xaa8811 });
+  const sword = (x: number): THREE.Group => {
+    const s = new THREE.Group();
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.75, 0.015), steel);
+    blade.position.y = 0.45;
+    const guard = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.04), gold);
+    guard.position.y = 0.08;
+    const handle = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.16, 8), grip);
+    s.add(blade, guard, handle);
+    s.position.set(x, 1.0, 0.1);
+    s.rotation.x = 0.35;
+    return s;
+  };
+  if (classId === "espadachim") {
+    g.add(sword(0.45), sword(-0.45));
+  } else if (classId === "guerreiro") {
+    g.add(sword(0.45));
+    const shield = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.32, 0.32, 0.04, 20),
+      new THREE.MeshStandardMaterial({ color: 0x5a6a7a, roughness: 0.5, metalness: 0.6 }),
+    );
+    shield.rotation.x = Math.PI / 2;
+    shield.position.set(-0.5, 1.05, 0.05);
+    const boss = new THREE.Mesh(new THREE.SphereGeometry(0.08, 10, 8), gold);
+    boss.position.set(-0.5, 1.05, -0.02);
+    g.add(shield, boss);
+  } else if (classId === "atirador") {
+    const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.8, 10), steel);
+    barrel.rotation.x = Math.PI / 2 - 0.15;
+    barrel.position.set(0.15, 1.05, -0.25);
+    const stock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.14, 0.3), grip);
+    stock.position.set(0.15, 0.95, 0.15);
+    g.add(barrel, stock);
+  } else {
+    // curandeiro: staff + glowing orb (foco sagrado)
+    const staff = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.028, 1.6, 8), grip);
+    staff.position.set(0.5, 1.1, 0.05);
+    staff.rotation.z = 0.1;
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 10), holy);
+    orb.position.set(0.56, 1.95, 0.05);
+    g.add(staff, orb);
+  }
+  return g;
+}
+
+function terrainHeightFor(zone: ZoneData, x: number, z: number): number {
   // Deterministic terrain, flattened near spawn. No Math.random.
   const d = Math.hypot(x, z);
   const flat = Math.min(1, Math.max(0, (d - 6) / 14));
   let h: number;
-  if (ZONE.biome === "desert") {
+  if (zone.biome === "desert") {
     // Smooth dunes: long low-frequency waves, no sharp rocks.
     h =
       1.8 * Math.sin(x * 0.05) * Math.cos(z * 0.04) +
@@ -38,10 +96,19 @@ function terrainHeight(x: number, z: number): number {
   return h * flat;
 }
 
-/** Placeholder character: capsule + head + facing marker. No external assets. */
-function makePlaceholder(color: number): THREE.Group {
+/**
+ * Placeholder character: capsule + head + facing marker + class weapon.
+ * Gender changes the silhouette (f: narrower shoulders, m: broader/muscular);
+ * armor recolors the body and the aura ring. No external assets.
+ */
+function makePlaceholder(
+  color: number,
+  opts: { gender?: string; classId?: string; armor?: ArmorData | null } = {},
+): { group: THREE.Group; bodyMat: THREE.MeshStandardMaterial; ringMat: THREE.MeshBasicMaterial } {
   const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.1 });
+  const armor = opts.armor ?? null;
+  const bodyColor = armor ? Number.parseInt(armor.colors.primary.slice(1), 16) : color;
+  const mat = new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.6, metalness: 0.1 });
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.35, 0.9, 4, 12), mat);
   body.position.y = 0.95;
   const head = new THREE.Mesh(
@@ -55,14 +122,18 @@ function makePlaceholder(color: number): THREE.Group {
   );
   nose.rotation.x = -Math.PI / 2;
   nose.position.set(0, 1.85, -0.32);
-  const ring = new THREE.Mesh(
-    new THREE.RingGeometry(0.45, 0.55, 24),
-    new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity: 0.7 }),
-  );
+  const auraColor = armor ? Number.parseInt(armor.aura.slice(1), 16) : color;
+  const ringMat = new THREE.MeshBasicMaterial({ color: auraColor, side: THREE.DoubleSide, transparent: true, opacity: 0.7 });
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.45, 0.55, 24), ringMat);
   ring.rotation.x = -Math.PI / 2;
   ring.position.y = 0.02;
   g.add(body, head, nose, ring);
-  return g;
+  if (opts.classId) g.add(makeWeapon(opts.classId));
+  // Gender silhouette (adults only, no nudity): f narrower, m broader/taller.
+  const sx = opts.gender === "m" ? 1.12 : 0.92;
+  const sy = opts.gender === "m" ? 1.04 : 0.98;
+  g.scale.set(sx, sy, 1);
+  return { group: g, bodyMat: mat, ringMat };
 }
 
 /**
@@ -108,7 +179,20 @@ export class WorldView {
   renderer!: RendererLike;
   readonly scene = new THREE.Scene();
   readonly camera: THREE.PerspectiveCamera;
-  private readonly players = new Map<number, { group: THREE.Group; guardDisc: THREE.Mesh }>();
+  /** Active zone data (cidade/dunas/dungeon visuals). */
+  private activeZone: ZoneData = ZONE;
+  /** 2.5D is the vertical-slice default; 3d restores the M0 orbit camera. */
+  cameraMode: Camera25DMode = "2.5d";
+  private zoom25D: number = CAMERA_25D.distanceM;
+  /** Current armor set of the local player (visual + aura). */
+  private currentArmor: ArmorData | null = null;
+  private readonly players = new Map<number, {
+    group: THREE.Group;
+    guardDisc: THREE.Mesh;
+    bodyMat?: THREE.MeshStandardMaterial;
+    ringMat?: THREE.MeshBasicMaterial;
+    classId?: string;
+  }>();
   private readonly mobs = new Map<number, { group: THREE.Group; ring: THREE.Mesh }>();
   /** M2: the local player's CharForge character (LOD0). Null = capsule fallback. */
   private localCharacter: CharacterBuild | null = null;
@@ -132,8 +216,44 @@ export class WorldView {
     this.scene.fog = new THREE.Fog(ZONE.palette.fog, 60, 160);
   }
 
+  /** 2.5D (fixed oblique) or 3D (orbit) camera. */
+  setCameraMode(mode: Camera25DMode): void {
+    this.cameraMode = mode;
+  }
+
+  /** Wheel zoom for the 2.5D camera (clamped 10–20 m). */
+  setZoom25D(distanceM: number): void {
+    this.zoom25D = clampCamera25DZoom(distanceM);
+  }
+
+  get zoom25DValue(): number {
+    return this.zoom25D;
+  }
+
+  /** Swap the local player's armor visual (body color + aura ring). */
+  setArmor(armorId: string | null): void {
+    this.currentArmor = armorId ? (armorById(armorId) ?? null) : null;
+    if (this.localId === null) return;
+    const entry = this.players.get(this.localId);
+    if (!entry) return;
+    if (entry.bodyMat && this.currentArmor) {
+      entry.bodyMat.color.set(this.currentArmor.colors.primary);
+    }
+    if (entry.ringMat && this.currentArmor) {
+      entry.ringMat.color.set(this.currentArmor.aura);
+    }
+  }
+
+  private terrainHeight(x: number, z: number): number {
+    return terrainHeightFor(this.activeZone, x, z);
+  }
+
   /** Try WebGPU first, fall back to WebGL2 (AGENTS.md: WebGPU with fallback). */
-  async init(): Promise<void> {
+  async init(zoneId?: string, dungeonId?: string): Promise<void> {
+    this.activeZone = (zoneId ? zoneById(zoneId) : undefined) ?? ZONE;
+    const pal = this.activeZone.palette;
+    this.scene.background = new THREE.Color(dungeonId ? "#1a1420" : pal.sky);
+    this.scene.fog = new THREE.Fog(dungeonId ? "#241a2e" : pal.fog, 60, 160);
     const canvas = document.createElement("canvas");
     let renderer: RendererLike | null = null;
     if (typeof navigator !== "undefined" && "gpu" in navigator) {
@@ -165,25 +285,25 @@ export class WorldView {
   }
 
   private buildLights(): void {
-    const hemi = new THREE.HemisphereLight(0xffe9c4, new THREE.Color(ZONE.palette.ground).getHex(), 0.9);
-    const sun = new THREE.DirectionalLight(new THREE.Color(ZONE.palette.sun).getHex(), 1.8);
+    const hemi = new THREE.HemisphereLight(0xffe9c4, new THREE.Color(this.activeZone.palette.ground).getHex(), 0.9);
+    const sun = new THREE.DirectionalLight(new THREE.Color(this.activeZone.palette.sun).getHex(), 1.8);
     sun.position.set(30, 50, -20);
     this.scene.add(hemi, sun);
   }
 
   private buildTerrain(): void {
-    const size = ZONE.zone.sizeM;
+    const size = this.activeZone.zone.sizeM;
     const geo = new THREE.PlaneGeometry(size, size, 64, 64);
     geo.rotateX(-Math.PI / 2);
     const pos = geo.attributes.position as THREE.BufferAttribute;
     const colors = new Float32Array(pos.count * 3);
-    const low = new THREE.Color(ZONE.palette.low);
-    const high = new THREE.Color(ZONE.palette.high);
+    const low = new THREE.Color(this.activeZone.palette.low);
+    const high = new THREE.Color(this.activeZone.palette.high);
     const c = new THREE.Color();
     for (let i = 0; i < pos.count; i += 1) {
       const x = pos.getX(i);
       const z = pos.getZ(i);
-      const h = terrainHeight(x, z);
+      const h = this.terrainHeight(x, z);
       pos.setY(i, h);
       const t = Math.min(1, Math.max(0, h / 2));
       c.copy(low).lerp(high, t);
@@ -206,12 +326,15 @@ export class WorldView {
     const palmMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 1 });
     const palmLeafMat = new THREE.MeshStandardMaterial({ color: 0x7a7a3a, roughness: 0.9 });
     const ruinMat = new THREE.MeshStandardMaterial({ color: 0xb09a7a, roughness: 1 });
-    for (const spec of ZONE.props) {
+    const buildingMat = new THREE.MeshStandardMaterial({ color: 0xd8c9a8, roughness: 0.9 });
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x8a4a2f, roughness: 0.9 });
+    const portalMat = new THREE.MeshBasicMaterial({ color: 0x66d8ff, transparent: true, opacity: 0.6 });
+    for (const spec of this.activeZone.props) {
       for (let i = 0; i < spec.count; i += 1) {
         const x = (rng() * 2 - 1) * 55;
         const z = (rng() * 2 - 1) * 55;
         if (Math.hypot(x, z) < 8) continue;
-        const y = terrainHeight(x, z);
+        const y = this.terrainHeight(x, z);
         if (spec.kind === "rock") {
           const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.5 + rng() * 1.2, 0), rockMat);
           rock.position.set(x, y + 0.4, z);
@@ -223,7 +346,7 @@ export class WorldView {
           const top = new THREE.Mesh(new THREE.SphereGeometry(0.25, 8, 6), cactusMat);
           top.position.set(x, y + 1.8, z);
           this.scene.add(cactus, top);
-        } else if (spec.kind === "palm") {
+        } else if (spec.kind === "palm" || spec.kind === "tree") {
           const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 2.6, 6), palmMat);
           trunk.position.set(x, y + 1.3, z);
           trunk.rotation.z = (rng() - 0.5) * 0.3;
@@ -235,8 +358,49 @@ export class WorldView {
           pillar.position.set(x, y + 0.9, z);
           pillar.rotation.y = rng() * Math.PI;
           this.scene.add(pillar);
+        } else if (spec.kind === "building") {
+          const w = 4 + rng() * 3;
+          const h = 3 + rng() * 2;
+          const house = new THREE.Mesh(new THREE.BoxGeometry(w, h, w * 0.8), buildingMat);
+          house.position.set(x, y + h / 2, z);
+          house.rotation.y = rng() * Math.PI;
+          const roof = new THREE.Mesh(new THREE.ConeGeometry(w * 0.75, 1.2, 4), roofMat);
+          roof.position.set(x, y + h + 0.6, z);
+          roof.rotation.y = Math.PI / 4 + house.rotation.y;
+          this.scene.add(house, roof);
+        } else if (spec.kind === "portal") {
+          const ring = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.15, 10, 28), portalMat);
+          ring.position.set(x, y + 1.8, z);
+          this.scene.add(ring);
         }
       }
+    }
+    // City NPC markers + portals from the zone data (fixed positions).
+    for (const npc of this.activeZone.npcs ?? []) {
+      const [nx, , nz] = WORLD_TO_THREE(npc.x, npc.y);
+      const ny = this.terrainHeight(nx, nz);
+      const marker = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.35, 0.9, 4, 10),
+        new THREE.MeshStandardMaterial({ color: 0x2e8b74, roughness: 0.7 }),
+      );
+      marker.position.set(nx, ny + 0.95, nz);
+      const halo = new THREE.Mesh(
+        new THREE.RingGeometry(0.6, 0.75, 24),
+        new THREE.MeshBasicMaterial({ color: 0xffd75a, side: THREE.DoubleSide, transparent: true, opacity: 0.8 }),
+      );
+      halo.rotation.x = -Math.PI / 2;
+      halo.position.set(nx, ny + 0.03, nz);
+      this.scene.add(marker, halo);
+    }
+    for (const portal of this.activeZone.portals ?? []) {
+      const [px, , pz] = WORLD_TO_THREE(portal.x, portal.y);
+      const py = this.terrainHeight(px, pz);
+      const gate = new THREE.Mesh(
+        new THREE.TorusGeometry(1.8, 0.18, 10, 28),
+        new THREE.MeshBasicMaterial({ color: 0x66d8ff, transparent: true, opacity: 0.7 }),
+      );
+      gate.position.set(px, py + 2, pz);
+      this.scene.add(gate);
     }
   }
 
@@ -319,23 +483,50 @@ export class WorldView {
     if (!entry) {
       const color = isLocal ? 0x2f7de1 : 0xe15a2f;
       // Local player with a CharForge genome renders the character (4 draw
-      // calls); everyone else (and no-genome fallback) keeps the capsule.
-      const group = isLocal && this.localCharacter ? this.localCharacter.group : makePlaceholder(color);
+      // calls); everyone else (and no-genome fallback) keeps the capsule,
+      // with class weapon, gender silhouette and armor colors from the snapshot.
+      const armor = isLocal ? this.currentArmor : e.armorId ? (armorById(e.armorId) ?? null) : null;
+      let group: THREE.Group;
+      let bodyMat: THREE.MeshStandardMaterial | undefined;
+      let ringMat: THREE.MeshBasicMaterial | undefined;
+      if (isLocal && this.localCharacter) {
+        group = this.localCharacter.group;
+      } else {
+        // exactOptionalPropertyTypes: only pass keys that are present.
+        const phOpts: { gender?: string; classId?: string; armor?: ArmorData | null } = { armor };
+        if (e.gender !== undefined) phOpts.gender = e.gender;
+        if (e.classId !== undefined) phOpts.classId = e.classId;
+        const built = makePlaceholder(color, phOpts);
+        group = built.group;
+        bodyMat = built.bodyMat;
+        ringMat = built.ringMat;
+      }
       if (isLocal) this.localId = e.id;
       this.scene.add(group);
       const [x, , z] = WORLD_TO_THREE(e.x, e.y);
-      group.position.set(x, terrainHeight(x, z), z);
+      group.position.set(x, this.terrainHeight(x, z), z);
       const guardDisc = new THREE.Mesh(
         new THREE.CircleGeometry(0.9, 24),
         new THREE.MeshBasicMaterial({ color: 0x4aa8ff, side: THREE.DoubleSide, transparent: true, opacity: 0.35 }),
       );
       guardDisc.visible = false;
       group.add(guardDisc);
-      entry = { group, guardDisc };
+      const created: {
+        group: THREE.Group;
+        guardDisc: THREE.Mesh;
+        bodyMat?: THREE.MeshStandardMaterial;
+        ringMat?: THREE.MeshBasicMaterial;
+        classId?: string;
+      } = { group, guardDisc };
+      if (bodyMat !== undefined) created.bodyMat = bodyMat;
+      if (ringMat !== undefined) created.ringMat = ringMat;
+      if (e.classId !== undefined) created.classId = e.classId;
+      entry = created;
       this.players.set(e.id, entry);
     }
+    if (!entry) return; // narrowing: entry is always set above
     const [tx, , tz] = WORLD_TO_THREE(e.x, e.y);
-    const ty = terrainHeight(tx, tz);
+    const ty = this.terrainHeight(tx, tz);
     entry.group.position.set(tx, ty, tz);
     // Mesh forward is -Z; world yaw maps to rotation.y = -yaw.
     entry.group.rotation.y = -e.yaw;
@@ -365,7 +556,7 @@ export class WorldView {
       this.mobs.set(e.id, entry);
     }
     const [tx, , tz] = WORLD_TO_THREE(e.x, e.y);
-    const ty = terrainHeight(tx, tz);
+    const ty = this.terrainHeight(tx, tz);
     entry.group.position.set(tx, ty, tz);
     entry.group.rotation.y = -e.yaw;
     entry.ring.visible = e.animState === 9;
@@ -402,7 +593,7 @@ export class WorldView {
       old.mat.dispose();
     }
     const [tx, , tz] = WORLD_TO_THREE(x, y);
-    const ty = terrainHeight(tx, tz);
+    const ty = this.terrainHeight(tx, tz);
     const mat = new THREE.MeshBasicMaterial({
       color, side: THREE.DoubleSide, transparent: true, opacity: 0.55, depthWrite: false,
     });
@@ -434,7 +625,7 @@ export class WorldView {
   /** Project a world position to screen pixels (for damage numbers / HP bars). */
   worldToScreen(x: number, y: number, heightM = 2): { sx: number; sy: number; behind: boolean } {
     const [tx, , tz] = WORLD_TO_THREE(x, y);
-    this.projV.set(tx, terrainHeight(tx, tz) + heightM, tz).project(this.camera);
+    this.projV.set(tx, this.terrainHeight(tx, tz) + heightM, tz).project(this.camera);
     return {
       sx: (this.projV.x * 0.5 + 0.5) * window.innerWidth,
       sy: (-this.projV.y * 0.5 + 0.5) * window.innerHeight,
@@ -461,20 +652,29 @@ export class WorldView {
    * Smoothed camera: the focus point and the camera position glide toward
    * their targets (~90 ms time constant) instead of snapping to the predicted
    * position every frame, so reconciliation corrections don't shake the screen.
-   * pitch = orbit elevation (0.05 near-horizontal … 1.25 high above).
+   * 2.5D mode: fixed oblique camera (38° elevation, fixed distance, due
+   * south of the player — no orbit; yaw/pitch are ignored). 3D mode: the
+   * M0 orbit camera (pitch = orbit elevation 0.05 … 1.25).
    */
   updateCamera(playerX: number, playerY: number, yaw: number, pitch: number, dt: number): void {
-    const { distanceM } = ZONE.camera;
     const [px, , pz] = WORLD_TO_THREE(playerX, playerY);
-    const py = terrainHeight(px, pz);
-    const cp = Math.cos(pitch);
-    const sp = Math.sin(pitch);
-    this.camPosTarget.set(
-      px - Math.sin(yaw) * cp * distanceM,
-      py + 1.4 + sp * distanceM,
-      pz + Math.cos(yaw) * cp * distanceM,
-    );
-    this.camFocusTarget.set(px, py + 1.4, pz);
+    const py = this.terrainHeight(px, pz);
+    if (this.cameraMode === "2.5d") {
+      const pose = computeCamera25D(playerX, playerY, this.zoom25D);
+      // World (x, y north) -> three (x, z = -y); camZ is height above ground.
+      this.camPosTarget.set(pose.camX, py + pose.camZ, -pose.camY);
+      this.camFocusTarget.set(pose.focusX, py + pose.focusZ, -pose.focusY);
+    } else {
+      const { distanceM } = this.activeZone.camera;
+      const cp = Math.cos(pitch);
+      const sp = Math.sin(pitch);
+      this.camPosTarget.set(
+        px - Math.sin(yaw) * cp * distanceM,
+        py + 1.4 + sp * distanceM,
+        pz + Math.cos(yaw) * cp * distanceM,
+      );
+      this.camFocusTarget.set(px, py + 1.4, pz);
+    }
     if (!this.camReady) {
       this.camPos.copy(this.camPosTarget);
       this.camFocus.copy(this.camFocusTarget);

@@ -44,12 +44,12 @@ export class GameClient {
     this.latencyHalf = Math.max(0, simulatedLatencyMs) / 2;
   }
 
-  connect(name: string): void {
+  connect(name: string, helloExtra: Partial<HelloPayload> = {}): void {
     const ws = new WebSocket(this.url);
     ws.binaryType = "arraybuffer";
     this.ws = ws;
     ws.onopen = () => {
-      const hello: HelloPayload = { protocolVersion: PROTOCOL_VERSION, clientBuild: "m0", name };
+      const hello: HelloPayload = { protocolVersion: PROTOCOL_VERSION, clientBuild: "m0", name, ...helloExtra };
       this.sendRaw(encodeMessage(MessageType.Hello, hello));
       this.pingTimer = window.setInterval(() => this.sendPing(), 1000);
     };

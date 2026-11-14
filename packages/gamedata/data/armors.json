@@ -1,0 +1,230 @@
+[
+  {
+    "aura": "#7fb8ff",
+    "bonus": {
+      "maxHp": 0,
+      "atk": 2
+    },
+    "classId": "espadachim",
+    "colors": {
+      "accent": "#d4af37",
+      "primary": "#7a8a99",
+      "secondary": "#2e8b74"
+    },
+    "id": "espadachim_iniciante",
+    "name": "Lâmina do Oásis",
+    "tier": 1,
+    "minLevel": 1,
+    "material": "couro vermelho e aço leve",
+    "setBonus": "Sem bônus de conjunto (peça inicial)."
+  },
+  {
+    "aura": "#ff5a6e",
+    "bonus": {
+      "maxHp": 10,
+      "atk": 7
+    },
+    "classId": "espadachim",
+    "colors": {
+      "accent": "#d4af37",
+      "primary": "#8a1f2d",
+      "secondary": "#0b3954"
+    },
+    "id": "espadachim_carmesim",
+    "name": "Lâmina Carmesim",
+    "tier": 2,
+    "minLevel": 8,
+    "material": "aço azul com prata",
+    "setBonus": "Corte Crescente causa +15% de dano."
+  },
+  {
+    "aura": "#ffd75a",
+    "bonus": {
+      "maxHp": 20,
+      "atk": 14
+    },
+    "classId": "espadachim",
+    "colors": {
+      "accent": "#f2e6c9",
+      "primary": "#d4af37",
+      "secondary": "#8a1f2d"
+    },
+    "id": "espadachim_dourada",
+    "name": "Lâmina Dourada",
+    "tier": 3,
+    "minLevel": 16,
+    "material": "aço carmesim com detalhes dourados",
+    "setBonus": "Julgamento Duplo recarrega 5 s mais rápido e deixa rastro carmesim."
+  },
+  {
+    "aura": "#9fb8c8",
+    "bonus": {
+      "maxHp": 0,
+      "def": 2
+    },
+    "classId": "guerreiro",
+    "colors": {
+      "accent": "#c9a86a",
+      "primary": "#5a6a7a",
+      "secondary": "#8a6d3b"
+    },
+    "id": "guerreiro_iniciante",
+    "name": "Aço do Oásis",
+    "tier": 1,
+    "minLevel": 1,
+    "material": "couro e aço fosco",
+    "setBonus": "Sem bônus de conjunto (peça inicial)."
+  },
+  {
+    "aura": "#ff8a5a",
+    "bonus": {
+      "maxHp": 10,
+      "def": 6
+    },
+    "classId": "guerreiro",
+    "colors": {
+      "accent": "#c8102e",
+      "primary": "#2f2f33",
+      "secondary": "#5a6a7a"
+    },
+    "id": "guerreiro_ferro",
+    "name": "Muralha de Ferro",
+    "tier": 2,
+    "minLevel": 8,
+    "material": "aço jade com filigranas carmesim",
+    "setBonus": "Provocação dura +1 s."
+  },
+  {
+    "aura": "#ffe9b8",
+    "bonus": {
+      "maxHp": 20,
+      "def": 12
+    },
+    "classId": "guerreiro",
+    "colors": {
+      "accent": "#ffffff",
+      "primary": "#d4af37",
+      "secondary": "#0b3954"
+    },
+    "id": "guerreiro_solar",
+    "name": "Guarda Solar",
+    "tier": 3,
+    "minLevel": 16,
+    "material": "obsidiana polida com ouro",
+    "setBonus": "Muralha de Aço dura +2 s e reflete 10% do dano bloqueado."
+  },
+  {
+    "aura": "#c8e07a",
+    "bonus": {
+      "maxHp": 0,
+      "atk": 3
+    },
+    "classId": "atirador",
+    "colors": {
+      "accent": "#c9a86a",
+      "primary": "#8a6d3b",
+      "secondary": "#4a5a2a"
+    },
+    "id": "atirador_iniciante",
+    "name": "Pólvora do Deserto",
+    "tier": 1,
+    "minLevel": 1,
+    "material": "couro curtido e tecido",
+    "setBonus": "Sem bônus de conjunto (peça inicial)."
+  },
+  {
+    "aura": "#5ad8a8",
+    "bonus": {
+      "maxHp": 10,
+      "atk": 8
+    },
+    "classId": "atirador",
+    "colors": {
+      "accent": "#d4af37",
+      "primary": "#2e8b74",
+      "secondary": "#0b3954"
+    },
+    "id": "atirador_nomade",
+    "name": "Atirador Nômade",
+    "tier": 2,
+    "minLevel": 8,
+    "material": "tecido leve com placas de bronze",
+    "setBonus": "Recuo Tático recarrega 2 s mais rápido."
+  },
+  {
+    "aura": "#ffb35a",
+    "bonus": {
+      "maxHp": 20,
+      "atk": 15
+    },
+    "classId": "atirador",
+    "colors": {
+      "accent": "#ff9a3c",
+      "primary": "#c9a86a",
+      "secondary": "#1b1b2f"
+    },
+    "id": "atirador_tempestade",
+    "name": "Tempestade de Areia",
+    "tier": 3,
+    "minLevel": 16,
+    "material": "metal negro com runas douradas",
+    "setBonus": "Tiro Certeiro causa +20% de dano em alvos com menos de 30% de HP."
+  },
+  {
+    "aura": "#fff2c8",
+    "bonus": {
+      "maxHp": 0,
+      "mana": 20
+    },
+    "classId": "curandeiro",
+    "colors": {
+      "accent": "#d4af37",
+      "primary": "#f2e6c9",
+      "secondary": "#2e8b74"
+    },
+    "id": "curandeiro_iniciante",
+    "name": "Manto do Alvorecer",
+    "tier": 1,
+    "minLevel": 1,
+    "material": "linho branco e dourado",
+    "setBonus": "Sem bônus de conjunto (peça inicial)."
+  },
+  {
+    "aura": "#ffd0d8",
+    "bonus": {
+      "maxHp": 10,
+      "mana": 50
+    },
+    "classId": "curandeiro",
+    "colors": {
+      "accent": "#d4af37",
+      "primary": "#ffffff",
+      "secondary": "#c8102e"
+    },
+    "id": "curandeiro_alvorada",
+    "name": "Alvorada Sagrada",
+    "tier": 2,
+    "minLevel": 8,
+    "material": "seda com bordado solar",
+    "setBonus": "Luz Curativa cura +15% a mais."
+  },
+  {
+    "aura": "#ffe98a",
+    "bonus": {
+      "maxHp": 20,
+      "mana": 100
+    },
+    "classId": "curandeiro",
+    "colors": {
+      "accent": "#ff9a3c",
+      "primary": "#ffe9b8",
+      "secondary": "#0b3954"
+    },
+    "id": "curandeiro_solar",
+    "name": "Bênção Solar",
+    "tier": 3,
+    "minLevel": 16,
+    "material": "seda azure com fios de ouro",
+    "setBonus": "Bênção Solar também cura 10 de HP por segundo enquanto durar."
+  }
+]

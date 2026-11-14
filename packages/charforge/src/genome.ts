@@ -45,7 +45,7 @@ export const SKIN_TONES = ["#F2D6C2", "#E8B88F", "#D9A066", "#B97A4E", "#8D5524"
 export const IRIS_COLORS = ["#3B6EA8", "#2E8B74", "#6C4A2F", "#1B1B2F", "#C8102E", "#7A5AC8"] as const;
 export const HAIR_COLORS = ["#1B1B2F", "#3A2A1A", "#6C8CFF", "#C8102E", "#D4AF37", "#E8E0D0"] as const;
 
-export const CLASS_IDS = ["espadachim", "guardiao", "atirador", "clerigo"] as const;
+export const CLASS_IDS = ["espadachim", "guerreiro", "atirador", "curandeiro"] as const;
 export type ClassId = (typeof CLASS_IDS)[number];
 
 export const FACE_PRESETS = ["soft", "sharp", "mature"] as const;
@@ -77,8 +77,8 @@ export interface CharacterGenome {
   /** Playable class. Default "espadachim" (only playable class in M1/M2).
    *  Decisão de design do Jose (M2): no criador, a classe é escolhida
    *  PRIMEIRO e a customização vem depois — a classe define corpo/roupa
-   *  iniciais via `applyClassPreset`. M3 desbloqueia guardiao/atirador/
-   *  clerigo como jogáveis. */
+   *  iniciais via `applyClassPreset`. As 4 classes são jogáveis no
+   *  vertical slice (Guerreiro, Atirador, Curandeiro, Espadachim). */
   classId: ClassId;
   body: BodyMorphs;
   face: FaceMorphs & { preset: FacePreset };
@@ -167,9 +167,9 @@ export function generateGenomeFromName(name: string): CharacterGenome {
  */
 export const CLASS_PRESETS: Record<ClassId, { theme: OutfitTheme; body: Partial<BodyMorphs> }> = {
   espadachim: { theme: "cheongsam_blade", body: { shoulders: 0.1, muscle: 0.2 } },
-  guardiao: { theme: "hanbok_armor", body: { shoulders: 0.5, muscle: 0.5, waist: 0.1 } },
+  guerreiro: { theme: "hanbok_armor", body: { shoulders: 0.5, muscle: 0.5, waist: 0.1 } },
   atirador: { theme: "desert_nomad", body: { shoulders: 0.2, muscle: 0.1, legLen: 0.1 } },
-  clerigo: { theme: "noble_robe", body: { shoulders: -0.2, muscle: -0.2, hips: 0.1 } },
+  curandeiro: { theme: "noble_robe", body: { shoulders: -0.2, muscle: -0.2, hips: 0.1 } },
 };
 
 /** Return a copy of the genome with the class preset applied. */

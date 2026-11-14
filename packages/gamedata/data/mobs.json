@@ -1,1 +1,312 @@
-[{"aggroRadiusM":12,"atk":8,"attack":{"active":6,"mult":1.0,"poise":10,"recovery":24,"shape":{"angle":90,"radius":2.0,"type":"arc"},"windup":30},"attackRangeM":1.8,"chaseSpeedMps":5.5,"color":"#8a5a2b","def":0,"id":"escorpiao","leashRadiusM":18,"maxHp":60,"name":"Escorpião do Deserto","poise":30,"poiseRegenPerS":5,"radiusM":0.5,"respawnS":8,"scale":1.0,"walkSpeedMps":2,"xp":10},{"aggroRadiusM":10,"atk":6,"attack":{"active":5,"mult":0.9,"poise":8,"recovery":18,"shape":{"angle":90,"radius":1.8,"type":"arc"},"windup":24},"attackRangeM":1.5,"chaseSpeedMps":6.5,"color":"#6b2f1d","def":0,"id":"formiga","leashRadiusM":18,"maxHp":40,"name":"Formiga Gigante","poise":20,"poiseRegenPerS":5,"radiusM":0.4,"respawnS":8,"scale":0.8,"walkSpeedMps":2.5,"xp":8},{"aggroRadiusM":10,"atk":7,"attack":{"active":6,"mult":1.0,"poise":12,"recovery":30,"shape":{"angle":90,"radius":2.0,"type":"arc"},"windup":36},"attackRangeM":1.6,"chaseSpeedMps":4,"color":"#2f2f33","def":6,"id":"besouro","leashRadiusM":18,"maxHp":90,"name":"Besouro do Deserto","poise":45,"poiseRegenPerS":5,"radiusM":0.6,"respawnS":10,"scale":1.2,"walkSpeedMps":1.5,"xp":12},{"aggroRadiusM":12,"atk":12,"attack":{"active":8,"mult":1.2,"poise":15,"recovery":30,"shape":{"angle":90,"radius":2.2,"type":"arc"},"windup":40},"attackRangeM":1.8,"chaseSpeedMps":3,"color":"#d8cdb4","def":4,"id":"mumia","leashRadiusM":18,"maxHp":120,"name":"Múmia das Tumbas","poise":60,"poiseRegenPerS":5,"radiusM":0.55,"respawnS":12,"scale":1.1,"walkSpeedMps":1.2,"xp":20}]
+[
+  {
+    "aggroRadiusM": 12,
+    "atk": 8,
+    "attack": {
+      "active": 6,
+      "mult": 1.0,
+      "poise": 10,
+      "recovery": 24,
+      "shape": {
+        "angle": 90,
+        "radius": 2.0,
+        "type": "arc"
+      },
+      "windup": 30
+    },
+    "attackRangeM": 1.8,
+    "chaseSpeedMps": 5.5,
+    "color": "#8a5a2b",
+    "def": 0,
+    "id": "escorpiao",
+    "leashRadiusM": 18,
+    "maxHp": 60,
+    "name": "Escorpião do Deserto",
+    "poise": 30,
+    "poiseRegenPerS": 5,
+    "radiusM": 0.5,
+    "respawnS": 8,
+    "scale": 1.0,
+    "walkSpeedMps": 2,
+    "xp": 10
+  },
+  {
+    "aggroRadiusM": 10,
+    "atk": 6,
+    "attack": {
+      "active": 5,
+      "mult": 0.9,
+      "poise": 8,
+      "recovery": 18,
+      "shape": {
+        "angle": 90,
+        "radius": 1.8,
+        "type": "arc"
+      },
+      "windup": 24
+    },
+    "attackRangeM": 1.5,
+    "chaseSpeedMps": 6.5,
+    "color": "#6b2f1d",
+    "def": 0,
+    "id": "formiga",
+    "leashRadiusM": 18,
+    "maxHp": 40,
+    "name": "Formiga Gigante",
+    "poise": 20,
+    "poiseRegenPerS": 5,
+    "radiusM": 0.4,
+    "respawnS": 8,
+    "scale": 0.8,
+    "walkSpeedMps": 2.5,
+    "xp": 8
+  },
+  {
+    "aggroRadiusM": 10,
+    "atk": 7,
+    "attack": {
+      "active": 6,
+      "mult": 1.0,
+      "poise": 12,
+      "recovery": 30,
+      "shape": {
+        "angle": 90,
+        "radius": 2.0,
+        "type": "arc"
+      },
+      "windup": 36
+    },
+    "attackRangeM": 1.6,
+    "chaseSpeedMps": 4,
+    "color": "#2f2f33",
+    "def": 6,
+    "id": "besouro",
+    "leashRadiusM": 18,
+    "maxHp": 90,
+    "name": "Besouro do Deserto",
+    "poise": 45,
+    "poiseRegenPerS": 5,
+    "radiusM": 0.6,
+    "respawnS": 10,
+    "scale": 1.2,
+    "walkSpeedMps": 1.5,
+    "xp": 12
+  },
+  {
+    "aggroRadiusM": 12,
+    "atk": 12,
+    "attack": {
+      "active": 8,
+      "mult": 1.2,
+      "poise": 15,
+      "recovery": 30,
+      "shape": {
+        "angle": 90,
+        "radius": 2.2,
+        "type": "arc"
+      },
+      "windup": 40
+    },
+    "attackRangeM": 1.8,
+    "chaseSpeedMps": 3,
+    "color": "#d8cdb4",
+    "def": 4,
+    "id": "mumia",
+    "leashRadiusM": 18,
+    "maxHp": 120,
+    "name": "Múmia das Tumbas",
+    "poise": 60,
+    "poiseRegenPerS": 5,
+    "radiusM": 0.55,
+    "respawnS": 12,
+    "scale": 1.1,
+    "walkSpeedMps": 1.2,
+    "xp": 20
+  },
+  {
+    "aggroRadiusM": 14,
+    "atk": 16,
+    "attack": {
+      "active": 6,
+      "mult": 1.1,
+      "poise": 12,
+      "recovery": 26,
+      "shape": {
+        "angle": 90,
+        "radius": 2.2,
+        "type": "arc"
+      },
+      "windup": 28
+    },
+    "attackRangeM": 2.0,
+    "chaseSpeedMps": 6.5,
+    "color": "#7a3b12",
+    "def": 2,
+    "id": "escorpiao_alfa",
+    "leashRadiusM": 20,
+    "maxHp": 220,
+    "name": "Escorpião Alfa",
+    "poise": 70,
+    "poiseRegenPerS": 6,
+    "radiusM": 0.7,
+    "respawnS": 15,
+    "scale": 1.5,
+    "walkSpeedMps": 2.5,
+    "xp": 45
+  },
+  {
+    "aggroRadiusM": 12,
+    "atk": 15,
+    "attack": {
+      "active": 7,
+      "mult": 1.1,
+      "poise": 12,
+      "recovery": 28,
+      "shape": {
+        "angle": 90,
+        "radius": 2.0,
+        "type": "arc"
+      },
+      "windup": 34
+    },
+    "attackRangeM": 1.8,
+    "chaseSpeedMps": 3.5,
+    "color": "#c9b98a",
+    "def": 5,
+    "id": "mumia_ancia",
+    "leashRadiusM": 18,
+    "maxHp": 260,
+    "name": "Múmia Anciã",
+    "poise": 80,
+    "poiseRegenPerS": 6,
+    "radiusM": 0.6,
+    "respawnS": 15,
+    "scale": 1.2,
+    "walkSpeedMps": 1.4,
+    "xp": 55
+  },
+  {
+    "aggroRadiusM": 14,
+    "atk": 18,
+    "attack": {
+      "active": 6,
+      "mult": 1.2,
+      "poise": 14,
+      "recovery": 24,
+      "shape": {
+        "angle": 60,
+        "radius": 6.0,
+        "type": "cone"
+      },
+      "windup": 36
+    },
+    "attackRangeM": 6.0,
+    "chaseSpeedMps": 4.5,
+    "color": "#5a1f6e",
+    "def": 3,
+    "id": "cultista_serket",
+    "leashRadiusM": 20,
+    "maxHp": 180,
+    "name": "Cultista de Serket",
+    "poise": 50,
+    "poiseRegenPerS": 6,
+    "radiusM": 0.5,
+    "respawnS": 14,
+    "scale": 1.0,
+    "walkSpeedMps": 2.2,
+    "xp": 60
+  },
+  {
+    "aggroRadiusM": 12,
+    "atk": 22,
+    "attack": {
+      "active": 8,
+      "mult": 1.3,
+      "poise": 20,
+      "recovery": 36,
+      "shape": {
+        "angle": 100,
+        "radius": 2.6,
+        "type": "arc"
+      },
+      "windup": 48
+    },
+    "attackRangeM": 2.2,
+    "chaseSpeedMps": 3.2,
+    "color": "#8a7a5a",
+    "def": 10,
+    "id": "golem_areia",
+    "leashRadiusM": 18,
+    "maxHp": 420,
+    "name": "Golem de Areia",
+    "poise": 120,
+    "poiseRegenPerS": 4,
+    "radiusM": 0.9,
+    "respawnS": 20,
+    "scale": 1.6,
+    "walkSpeedMps": 1.0,
+    "xp": 90
+  },
+  {
+    "id": "neferet",
+    "name": "Neferet, a Sacerdotisa Mumificada",
+    "maxHp": 4500,
+    "atk": 24,
+    "def": 8,
+    "poise": 300,
+    "poiseRegenPerS": 8,
+    "radiusM": 0.8,
+    "color": "#d8cdb4",
+    "scale": 1.6,
+    "walkSpeedMps": 1.5,
+    "chaseSpeedMps": 4.0,
+    "aggroRadiusM": 16,
+    "leashRadiusM": 25,
+    "attackRangeM": 2.4,
+    "attack": {
+      "windup": 40,
+      "active": 8,
+      "recovery": 30,
+      "shape": {
+        "type": "arc",
+        "radius": 3.0,
+        "angle": 120
+      },
+      "mult": 1.3,
+      "poise": 20
+    },
+    "respawnS": 3600,
+    "xp": 400
+  },
+  {
+    "id": "serket",
+    "name": "Serket, a Rainha Escorpião",
+    "maxHp": 9000,
+    "atk": 30,
+    "def": 8,
+    "poise": 400,
+    "poiseRegenPerS": 10,
+    "radiusM": 1.0,
+    "color": "#8a1f2d",
+    "scale": 1.8,
+    "walkSpeedMps": 2.0,
+    "chaseSpeedMps": 5.0,
+    "aggroRadiusM": 18,
+    "leashRadiusM": 30,
+    "attackRangeM": 2.6,
+    "attack": {
+      "windup": 36,
+      "active": 8,
+      "recovery": 28,
+      "shape": {
+        "type": "arc",
+        "radius": 3.2,
+        "angle": 140
+      },
+      "mult": 1.4,
+      "poise": 25
+    },
+    "respawnS": 86400,
+    "xp": 1200
+  }
+]

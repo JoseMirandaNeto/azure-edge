@@ -3,15 +3,31 @@
 # Netlify Drop, and point it at this service with
 #   ?server=wss://<this-service>.onrender.com
 # or build the client with VITE_GAME_SERVER_URL set to that wss:// URL.
-# See DEPLOY.md. Not yet tested end-to-end against a live Render service.
+# See DEPLOY.md. Status 2026-11-14: verified end-to-end from a clean
+# checkout of HEAD (c1bb48d): install + build 8/8, /healthz 200, smoke
+# M1 (2 WS clients) PASS. Two clean-clone traps were fixed in the repo:
+#   1. pnpm-lock.yaml was out of sync with package.json (@types/node) —
+#      `pnpm install --frozen-lockfile` failed. Lockfile regenerated.
+#   2. tracked tsconfig.tsbuildinfo files made `tsc -p` (composite)
+#      skip emitting dist/ on a fresh clone. They are now gitignored
+#      and untracked; the `find ... -delete` below is a safety net in
+#      case a stale one ever comes back.
 services:
   - type: web
     name: azure-edge-server-game
     runtime: node
     plan: free
-    buildCommand: npm i -g pnpm@9.15.9 && pnpm install --frozen-lockfile && pnpm build
+    buildCommand: find . -name 'tsconfig.tsbuildinfo' -not -path '*/node_modules/*' -delete; npm i -g pnpm@9.15.9 && pnpm install --frozen-lockfile && pnpm build
     startCommand: pnpm --filter @azure-edge/server-game start
     healthCheckPath: /healthz
     envVars:
       - key: NODE_ENV
         value: production
+    # Free-tier sleep: the service spins down after 15 min without
+    # inbound traffic (~1 min to wake). Keep it warm with a ping to
+    # /healthz every 10 min — see deploy/keep-alive.cron and DEPLOY.md
+    # (UptimeRobot free, 5-min interval, is the zero-maintenance way).
+    # Budget: one always-awake free service burns ~720 h/month of the
+    # 750 free instance hours per workspace. Do NOT keep-alive a second
+    # free service in the same workspace, or all of them get suspended
+    # when the hours run out.

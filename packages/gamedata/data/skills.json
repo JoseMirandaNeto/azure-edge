@@ -1,1 +1,605 @@
-[{"active":[{"from":10,"hit":{"effect":"knockback","mult":2.2,"poise":20},"shape":{"angle":140,"radius":3.2,"type":"arc"},"to":16}],"cancelInto":["dodge"],"classId":"espadachim","cooldownS":6,"costMana":18,"id":"espadachim_corte_crescente","kind":"damage","name":"Corte Crescente","recovery":20,"startup":10,"superArmor":{"from":8,"to":18},"vfx":"crescent_blue"},{"active":[{"from":12,"hit":{},"shape":{"type":"self"},"to":16}],"cancelInto":["dodge"],"classId":"guardiao","cooldownS":10,"costMana":20,"id":"guardiao_provocacao","kind":"taunt","name":"Provocação","recovery":20,"startup":12,"taunt":{"durationS":5,"radiusM":10,"tempHp":30},"vfx":"taunt_roar"},{"active":[{"from":12,"hit":{"effect":"knockback","mult":1.0,"poise":6},"shape":{"angle":25,"radius":9,"type":"cone"},"to":14},{"from":16,"hit":{"effect":"knockback","mult":1.0,"poise":6},"shape":{"angle":25,"radius":9,"type":"cone"},"to":18}],"cancelInto":["dodge"],"classId":"atirador","cooldownS":5,"costMana":15,"id":"atirador_disparo_rapido","kind":"damage","name":"Disparo Rápido","recovery":18,"startup":12,"vfx":"shotgun_blast"},{"active":[{"from":14,"hit":{},"shape":{"type":"self"},"to":18}],"buff":{"damageReduction":0.3,"durationS":8,"radiusM":6},"cancelInto":["dodge"],"classId":"clerigo","cooldownS":8,"costMana":25,"id":"clerigo_bencao_solar","kind":"buff","name":"Bênção Solar","recovery":20,"startup":14,"vfx":"holy_light"}]
+[
+ {
+  "active": [
+   {
+    "from": 10,
+    "hit": {
+     "effect": "knockback",
+     "mult": 2.2,
+     "poise": 20
+    },
+    "shape": {
+     "angle": 140,
+     "radius": 3.2,
+     "type": "arc"
+    },
+    "to": 16
+   }
+  ],
+  "animation": "Giro de 180° com as duas lâminas cruzadas; rastro em lua crescente azul que permanece 0,3 s no ar.",
+  "cancelInto": [
+   "dodge"
+  ],
+  "classId": "espadachim",
+  "cooldownS": 6,
+  "costMana": 18,
+  "description": "Arco de 140° que corta tudo à frente e empurra os inimigos. Skill assinatura do Espadachim.",
+  "id": "espadachim_corte_crescente",
+  "kind": "damage",
+  "name": "Corte Crescente",
+  "recovery": 20,
+  "startup": 10,
+  "superArmor": {
+   "from": 8,
+   "to": 18
+  },
+  "vfx": "crescent_blue"
+ },
+ {
+  "active": [
+   {
+    "from": 8,
+    "hit": {
+     "mult": 0.8,
+     "poise": 6
+    },
+    "shape": {
+     "angle": 120,
+     "radius": 2.8,
+     "type": "arc"
+    },
+    "to": 11
+   },
+   {
+    "from": 14,
+    "hit": {
+     "mult": 0.8,
+     "poise": 6
+    },
+    "shape": {
+     "angle": 120,
+     "radius": 2.8,
+     "type": "arc"
+    },
+    "to": 17
+   },
+   {
+    "from": 20,
+    "hit": {
+     "effect": "knockback",
+     "mult": 1.2,
+     "poise": 12
+    },
+    "shape": {
+     "angle": 120,
+     "radius": 2.8,
+     "type": "arc"
+    },
+    "to": 24
+   }
+  ],
+  "animation": "Três giros encadeados (baixo, alto, horizontal); cada giro deixa um rastro de lâmina que se cruza no terceiro.",
+  "cancelInto": [
+   "dodge"
+  ],
+  "classId": "espadachim",
+  "cooldownS": 9,
+  "costMana": 22,
+  "description": "Sequência de três cortes giratórios; o último empurra os inimigos para trás.",
+  "id": "espadachim_lamina_dancante",
+  "kind": "damage",
+  "name": "Lâmina Dançante",
+  "recovery": 22,
+  "startup": 8,
+  "vfx": "blade_dance"
+ },
+ {
+  "active": [
+   {
+    "from": 6,
+    "hit": {},
+    "shape": {
+     "type": "self"
+    },
+    "to": 10
+   }
+  ],
+  "animation": "Lâminas cruzadas à frente do peito, brilho azul concentrado nas bordas; postura baixa por 2 s ou até o contra-ataque.",
+  "buff": {
+   "damageReduction": 0.5,
+   "durationS": 2,
+   "radiusM": 1.5
+  },
+  "cancelInto": [
+   "dodge"
+  ],
+  "classId": "espadachim",
+  "cooldownS": 12,
+  "costMana": 15,
+  "description": "Postura de contra-ataque: reduz o dano recebido em 50% por 2 s. Se for atingido durante a postura, responde com um corte rápido (efeito aplicado pelo servidor como skill de contra-ataque).",
+  "id": "espadachim_contra_azure",
+  "kind": "buff",
+  "name": "Contra Azure",
+  "recovery": 12,
+  "startup": 6,
+  "vfx": "counter_stance"
+ },
+ {
+  "active": [
+   {
+    "from": 20,
+    "hit": {
+     "effect": "knockdown",
+     "mult": 3.5,
+     "poise": 40
+    },
+    "shape": {
+     "angle": 180,
+     "radius": 4,
+     "type": "arc"
+    },
+    "to": 28
+   }
+  ],
+  "animation": "Salto com as duas lâminas erguidas, queda em X sobre o alvo; onda de choque azul se espalha pelo chão e poeira levanta em anel.",
+  "cancelInto": [
+   "dodge"
+  ],
+  "classId": "espadachim",
+  "cooldownS": 30,
+  "costMana": 50,
+  "description": "Ultimate do Espadachim: golpe duplo em X que derruba tudo num semicírculo de 4 m.",
+  "id": "espadachim_julgamento_duplo",
+  "kind": "damage",
+  "name": "Julgamento Duplo",
+  "recovery": 30,
+  "startup": 20,
+  "superArmor": {
+   "from": 16,
+   "to": 30
+  },
+  "vfx": "dual_judgment"
+ },
+ {
+  "active": [
+   {
+    "from": 12,
+    "hit": {},
+    "shape": {
+     "type": "self"
+    },
+    "to": 16
+   }
+  ],
+  "animation": "Escudo cravado no chão, rugido com onda de choque vermelha que se expande em anel até 10 m.",
+  "cancelInto": [
+   "dodge"
+  ],
+  "classId": "guerreiro",
+  "cooldownS": 10,
+  "costMana": 20,
+  "description": "Atrai os mobs num raio de 10 m por 5 s e ganha 30 de vida temporária.",
+  "id": "guerreiro_provocacao",
+  "kind": "taunt",
+  "name": "Provocação",
+  "recovery": 20,
+  "startup": 12,
+  "taunt": {
+   "durationS": 5,
+   "radiusM": 10,
+   "tempHp": 30
+  },
+  "vfx": "taunt_roar"
+ },
+ {
+  "active": [
+   {
+    "from": 16,
+    "hit": {
+     "effect": "knockdown",
+     "mult": 2.0,
+     "poise": 30
+    },
+    "shape": {
+     "angle": 120,
+     "radius": 2.8,
+     "type": "arc"
+    },
+    "to": 22
+   }
+  ],
+  "animation": "Arma erguida acima da cabeça por 16 frames, golpe vertical que racha o chão; fragmentos de pedra voam.",
+  "cancelInto": [
+   "dodge"
+  ],
+  "classId": "guerreiro",
+  "cooldownS": 8,
+  "costMana": 20,
+  "description": "Golpe vertical pesado que derruba inimigos e quebra postura.",
+  "id": "guerreiro_golpe_esmagador",
+  "kind": "damage",
+  "name": "Golpe Esmagador",
+  "recovery": 24,
+  "startup": 16,
+  "superArmor": {
+   "from": 12,
+   "to": 22
+  },
+  "vfx": "crush"
+ },
+ {
+  "active": [
+   {
+    "from": 10,
+    "hit": {},
+    "shape": {
+     "type": "self"
+    },
+    "to": 14
+   }
+  ],
+  "animation": "Escudo à frente, placas de aço translúcidas se formam em arco ao redor do Guerreiro e dos aliados próximos.",
+  "buff": {
+   "damageReduction": 0.5,
+   "durationS": 6,
+   "radiusM": 5
+  },
+  "cancelInto": [
+   "dodge"
+  ],
+  "classId": "guerreiro",
+  "cooldownS": 18,
+  "costMana": 30,
+  "description": "Muralha de aço: reduz o dano recebido pelo Guerreiro e aliados num raio de 5 m em 50% por 6 s.",
+  "id": "guerreiro_muralha_de_aco",
+  "kind": "buff",
+  "name": "Muralha de Aço",
+  "recovery": 18,
+  "startup": 10,
+  "vfx": "steel_wall"
+ },
+ {
+  "active": [
+   {
+    "from": 8,
+    "hit": {
+     "effect": "knockback",
+     "mult": 1.2,
+     "poise": 18
+    },
+    "shape": {
+     "angle": 90,
+     "radius": 2.5,
+     "type": "arc"
+    },
+    "to": 16
+   }
+  ],
+  "animation": "Avanço de 6 m com o escudo à frente, poeira e linhas de velocidade; impacto com onda de choque ao atingir o alvo.",
+  "cancelInto": [
+   "dodge"
+  ],
+  "classId": "guerreiro",
+  "cooldownS": 12,
+  "costMana": 15,
+  "description": "Investida com o escudo que empurra e atordoa o que estiver no caminho. Skill de mobilidade + dano.",
+  "id": "guerreiro_investida_do_touro",
+  "kind": "mobility",
+  "name": "Investida do Touro",
+  "recovery": 16,
+  "startup": 8,
+  "vfx": "bull_charge"
+ },
+ {
+  "active": [
+   {
+    "from": 12,
+    "hit": {
+     "effect": "knockback",
+     "mult": 1.0,
+     "poise": 6
+    },
+    "shape": {
+     "angle": 25,
+     "radius": 9,
+     "type": "cone"
+    },
+    "to": 14
+   },
+   {
+    "from": 16,
+    "hit": {
+     "effect": "knockback",
+     "mult": 1.0,
+     "poise": 6
+    },
+    "shape": {
+     "angle": 25,
+     "radius": 9,
+     "type": "cone"
+    },
+    "to": 18
+   }
+  ],
+  "animation": "Dois disparos em sequência com recuo do ombro; clarão laranja e cartuchos ejetados.",
+  "cancelInto": [
+   "dodge"
+  ],
+  "classId": "atirador",
+  "cooldownS": 5,
+  "costMana": 15,
+  "description": "Dois tiros rápidos em cone de 9 m. Skill assinatura do Atirador.",
+  "id": "atirador_disparo_rapido",
+  "kind": "damage",
+  "name": "Disparo Rápido",
+  "recovery": 18,
+  "startup": 12,
+  "vfx": "shotgun_blast"
+ },
+ {
+  "active": [
+   {
+    "from": 14,
+    "hit": {
+     "mult": 0.7,
+     "poise": 4
+    },
+    "shape": {
+     "angle": 40,
+     "radius": 10,
+     "type": "cone"
+    },
+    "to": 16
+   },
+   {
+    "from": 18,
+    "hit": {
+     "mult": 0.7,
+     "poise": 4
+    },
+    "shape": {
+     "angle": 40,
+     "radius": 10,
+     "type": "cone"
+    },
+    "to": 20
+   },
+   {
+    "from": 22,
+    "hit": {
+     "mult": 0.7,
+     "poise": 4
+    },
+    "shape": {
+     "angle": 40,
+     "radius": 10,
+     "type": "cone"
+    },
+    "to": 24
+   },
+   {
+    "from": 26,
+    "hit": {
+     "mult": 0.7,
+     "poise": 4
+    },
+    "shape": {
+     "angle": 40,
+     "radius": 10,
+     "type": "cone"
+    },
+    "to": 28
+   },
+   {
+    "from": 30,
+    "hit": {
+     "effect": "knockback",
+     "mult": 0.7,
+     "poise": 4
+    },
+    "shape": {
+     "angle": 40,
+     "radius": 10,
+     "type": "cone"
+    },
+    "to": 32
+   }
+  ],
+  "animation": "Espingarda apontada para cima em leque; cinco salvas caem em cone com explosões de poeira e estilhaços.",
+  "cancelInto": [
+   "dodge"
+  ],
+  "classId": "atirador",
+  "cooldownS": 12,
+  "costMana": 30,
+  "description": "Cinco salvas em cone de 10 m; excelente contra hordas.",
+  "id": "atirador_chuva_de_chumbo",
+  "kind": "damage",
+  "name": "Chuva de Chumbo",
+  "recovery": 20,
+  "startup": 14,
+  "vfx": "lead_rain"
+ },
+ {
+  "active": [
+   {
+    "from": 18,
+    "hit": {
+     "effect": "knockback",
+     "mult": 3.0,
+     "poise": 25
+    },
+    "shape": {
+     "angle": 10,
+     "radius": 16,
+     "type": "cone"
+    },
+    "to": 20
+   }
+  ],
+  "animation": "Mira prolongada com linha de mira vermelha visível por 18 frames; disparo único com clarão branco e rastro de fumaça em linha reta.",
+  "cancelInto": [
+   "dodge"
+  ],
+  "classId": "atirador",
+  "cooldownS": 10,
+  "costMana": 25,
+  "description": "Tiro único de longo alcance (16 m) com dano alto e empurrão.",
+  "id": "atirador_tiro_certeiro",
+  "kind": "damage",
+  "name": "Tiro Certeiro",
+  "recovery": 22,
+  "startup": 18,
+  "vfx": "deadeye"
+ },
+ {
+  "active": [
+   {
+    "from": 6,
+    "hit": {},
+    "shape": {
+     "type": "self"
+    },
+    "to": 12
+   }
+  ],
+  "animation": "Salto mortal para trás de 5 m com rolamento; nuvem de poeira marca o ponto de partida e o de chegada.",
+  "cancelInto": [
+   "dodge"
+  ],
+  "classId": "atirador",
+  "cooldownS": 10,
+  "costMana": 10,
+  "description": "Recua 5 m instantaneamente, criando distância do inimigo. Skill de mobilidade (sem dano).",
+  "id": "atirador_recuo_tatico",
+  "kind": "mobility",
+  "name": "Recuo Tático",
+  "recovery": 10,
+  "startup": 6,
+  "vfx": "tactical_retreat"
+ },
+ {
+  "active": [
+   {
+    "from": 14,
+    "hit": {
+     "heal": 20
+    },
+    "shape": {
+     "type": "self"
+    },
+    "to": 18
+   }
+  ],
+  "animation": "Foco sagrado erguido, raio de sol desce em coluna dourada sobre o Curandeiro e os aliados próximos; partículas de luz flutuam.",
+  "buff": {
+   "damageReduction": 0.3,
+   "durationS": 8,
+   "radiusM": 6
+  },
+  "cancelInto": [
+   "dodge"
+  ],
+  "classId": "curandeiro",
+  "cooldownS": 8,
+  "costMana": 25,
+  "description": "Bênção do sol: reduz o dano recebido pelo Curandeiro e aliados num raio de 6 m em 30% por 8 s.",
+  "id": "curandeiro_bencao_solar",
+  "kind": "buff",
+  "name": "Bênção Solar",
+  "recovery": 20,
+  "startup": 14,
+  "vfx": "holy_light"
+ },
+ {
+  "active": [
+   {
+    "from": 12,
+    "hit": {
+     "heal": 60
+    },
+    "shape": {
+     "type": "self"
+    },
+    "to": 16
+   }
+  ],
+  "animation": "Mãos juntas em prece, luz verde-dourada envolve o aliado mais ferido próximo (ou o próprio Curandeiro); números de cura em verde.",
+  "cancelInto": [
+   "dodge"
+  ],
+  "classId": "curandeiro",
+  "cooldownS": 6,
+  "costMana": 20,
+  "description": "Cura instantânea de 60 no aliado mais ferido num raio de 8 m (ou em si mesmo).",
+  "id": "curandeiro_luz_curativa",
+  "kind": "heal",
+  "name": "Luz Curativa",
+  "recovery": 16,
+  "startup": 12,
+  "vfx": "healing_light"
+ },
+ {
+  "active": [
+   {
+    "from": 12,
+    "hit": {},
+    "shape": {
+     "type": "self"
+    },
+    "to": 16
+   }
+  ],
+  "animation": "Círculo rúnico dourado se desenha no chão (raio 6 m) com símbolos que giram lentamente por 8 s.",
+  "buff": {
+   "damageReduction": 0.25,
+   "durationS": 8,
+   "radiusM": 6
+  },
+  "cancelInto": [
+   "dodge"
+  ],
+  "classId": "curandeiro",
+  "cooldownS": 16,
+  "costMana": 35,
+  "description": "Círculo sagrado no chão: aliados dentro dele recebem 25% menos dano por 8 s.",
+  "id": "curandeiro_circulo_sagrado",
+  "kind": "buff",
+  "name": "Círculo Sagrado",
+  "recovery": 18,
+  "startup": 12,
+  "vfx": "sacred_circle"
+ },
+ {
+  "active": [
+   {
+    "from": 16,
+    "hit": {
+     "effect": "knockback",
+     "mult": 2.4,
+     "poise": 22
+    },
+    "shape": {
+     "angle": 30,
+     "radius": 8,
+     "type": "cone"
+    },
+    "to": 22
+   }
+  ],
+  "animation": "Foco apontado para frente, feixe de luz solar concentrado que atravessa os inimigos em cone; o chão fica marcado com queimadura dourada.",
+  "cancelInto": [
+   "dodge"
+  ],
+  "classId": "curandeiro",
+  "cooldownS": 20,
+  "costMana": 40,
+  "description": "Feixe solar em cone de 8 m; a principal ferramenta de dano do Curandeiro.",
+  "id": "curandeiro_julgamento_solar",
+  "kind": "damage",
+  "name": "Julgamento Solar",
+  "recovery": 24,
+  "startup": 16,
+  "vfx": "solar_judgment"
+ }
+]

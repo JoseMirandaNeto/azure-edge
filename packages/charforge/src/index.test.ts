@@ -58,8 +58,8 @@ describe("charforge v1", () => {
 
   it("applyClassPreset sets class, theme and body shape", () => {
     const base = generateGenome(99);
-    const g = applyClassPreset(base, "guardiao");
-    expect(g.classId).toBe("guardiao");
+    const g = applyClassPreset(base, "guerreiro");
+    expect(g.classId).toBe("guerreiro");
     expect(g.outfit.theme).toBe("hanbok_armor");
     expect(g.body.shoulders).toBe(0.5);
     expect(g.body.muscle).toBe(0.5);

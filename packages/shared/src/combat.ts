@@ -74,6 +74,12 @@ export interface Combatant {
   comboHits: number;
   /** Frame of the last hit taken (combo reset). */
   lastHitFrame: number;
+  /** Temporary HP (Provocação): absorbs damage before real HP. */
+  tempHp: number;
+  /** Frame until which the Bênção Solar damage reduction applies. */
+  buffUntilFrame: number;
+  /** Damage reduction while the buff is active (0 = none). */
+  buffDamageReduction: number;
 }
 
 export function createCombatant(maxHp: number, stamina: number, mana: number, poise: number): Combatant {
@@ -94,6 +100,9 @@ export function createCombatant(maxHp: number, stamina: number, mana: number, po
     skillReadyFrame: {},
     comboHits: 0,
     lastHitFrame: -1000,
+    tempHp: 0,
+    buffUntilFrame: -1,
+    buffDamageReduction: 0,
   };
 }
 

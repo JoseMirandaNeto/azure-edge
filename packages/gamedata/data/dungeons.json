@@ -1,0 +1,187 @@
+[
+  {
+    "boss": {
+      "mobId": "neferet",
+      "name": "Neferet, a Sacerdotisa Mumificada",
+      "level": 12,
+      "hpMult": 3,
+      "atkMult": 1.5
+    },
+    "id": "tumbas",
+    "levelMax": 12,
+    "levelMin": 5,
+    "maxPlayers": 8,
+    "mobs": [
+      {
+        "count": 4,
+        "level": 8,
+        "mobId": "mumia"
+      },
+      {
+        "count": 4,
+        "level": 7,
+        "mobId": "formiga"
+      },
+      {
+        "count": 2,
+        "level": 8,
+        "mobId": "besouro"
+      }
+    ],
+    "name": "Tumbas Soterradas",
+    "entrance": {
+      "zone": "cidade_serket",
+      "npc": "Guia do Oásis",
+      "questId": "q05_primeira_tumba"
+    },
+    "encounters": [
+      {
+        "id": "tumbas_sala_entrada",
+        "name": "Sala da Entrada",
+        "kind": "trash",
+        "mechanics": [
+          "Múmias em pares; priorize o Cultista antes que ele cure as múmias."
+        ]
+      },
+      {
+        "id": "tumbas_corredor_armadilhas",
+        "name": "Corredor das Armadilhas",
+        "kind": "trash",
+        "mechanics": [
+          "Placas de pressão no chão (decal vermelho 1,2 s): saia do círculo antes da lança disparar."
+        ]
+      },
+      {
+        "id": "tumbas_guardiao_besouro",
+        "name": "Besouro Guardião",
+        "kind": "elite",
+        "mechanics": [
+          "Carapaça: DEF alta até a postura quebrar; telegrafa investida em linha (decal 0,8 s)."
+        ]
+      },
+      {
+        "id": "tumbas_neferet",
+        "name": "Neferet, a Sacerdotisa Mumificada",
+        "kind": "boss",
+        "mechanics": [
+          "Fase 1: invocação de 2 múmias a cada 25% de HP perdido.",
+          "Fase 2 (HP < 50%): chuva de areia — decal circular no chão, saia em 1,0 s.",
+          "Fase 3 (HP < 25%): enrage — velocidade de ataque +30%; quebre a postura para interromper."
+        ]
+      }
+    ],
+    "loot": [
+      {
+        "item": "Bandagem da Sacerdotisa",
+        "rarity": "Raro",
+        "dropChance": 0.5
+      },
+      {
+        "item": "Armadura de Jade Carmesim (Guerreiro T2)",
+        "rarity": "Épico",
+        "dropChance": 0.25
+      },
+      {
+        "item": "Essência da Tumba",
+        "rarity": "Incomum",
+        "dropChance": 1
+      }
+    ],
+    "lockoutHours": 8
+  },
+  {
+    "boss": {
+      "mobId": "serket",
+      "name": "Serket, a Rainha Escorpião",
+      "level": 20,
+      "hpMult": 4,
+      "atkMult": 1.8
+    },
+    "id": "templo",
+    "levelMax": 20,
+    "levelMin": 13,
+    "maxPlayers": 8,
+    "mobs": [
+      {
+        "count": 5,
+        "level": 15,
+        "mobId": "mumia"
+      },
+      {
+        "count": 4,
+        "level": 14,
+        "mobId": "escorpiao"
+      },
+      {
+        "count": 3,
+        "level": 15,
+        "mobId": "besouro"
+      }
+    ],
+    "name": "Templo de Serket",
+    "entrance": {
+      "zone": "cidade_serket",
+      "npc": "Guia do Oásis",
+      "questId": "q11_templo_serket"
+    },
+    "encounters": [
+      {
+        "id": "templo_patio",
+        "name": "Pátio dos Cultistas",
+        "kind": "trash",
+        "mechanics": [
+          "Cultistas canalizam à distância (cone 6 m); interrompa com stagger ou desvie do cone."
+        ]
+      },
+      {
+        "id": "templo_golem",
+        "name": "Golem de Areia",
+        "kind": "elite",
+        "mechanics": [
+          "Soco em área telegrafado (decal 1,2 s); após o soco, fica 2 s vulnerável (dano x1,5)."
+        ]
+      },
+      {
+        "id": "templo_ponte",
+        "name": "Ponte do Ferrão",
+        "kind": "trash",
+        "mechanics": [
+          "Escorpiões Alfa empurram para fora da ponte; Guerreiro segura a frente, Atirador limpa os lados."
+        ]
+      },
+      {
+        "id": "templo_serket",
+        "name": "Serket, a Rainha Escorpião",
+        "kind": "boss",
+        "mechanics": [
+          "Fase 1: cauda com ferrão — golpe em arco de 270° telegrafado (decal 1,0 s).",
+          "Fase 2 (HP < 66%): invoca 2 Escorpiões Alfa; Serket ganha super-armor durante a invocação.",
+          "Fase 3 (HP < 33%): chuva de veneno — poças verdes no chão (dano por segundo); enrage aos 5 min (dano +50%)."
+        ]
+      }
+    ],
+    "loot": [
+      {
+        "item": "Ferrão de Serket",
+        "rarity": "Lendário",
+        "dropChance": 0.15
+      },
+      {
+        "item": "Égide de Serket (Guerreiro T3)",
+        "rarity": "Épico",
+        "dropChance": 0.3
+      },
+      {
+        "item": "Traje da Lua Carmesim (Espadachim T3)",
+        "rarity": "Épico",
+        "dropChance": 0.3
+      },
+      {
+        "item": "Essência Azure",
+        "rarity": "Raro",
+        "dropChance": 1
+      }
+    ],
+    "lockoutHours": 24
+  }
+]

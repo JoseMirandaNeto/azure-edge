@@ -1,1 +1,264 @@
-[{"base":{"atk":10,"def":5,"mana":100,"maxHp":100,"stamina":100,"walkSpeedMps":6},"basicChain":[{"active":4,"advanceM":0.6,"cancelFrom":10,"cancelTo":22,"mult":0.9,"poise":8,"recovery":12,"startup":7},{"active":4,"advanceM":0.6,"cancelFrom":9,"cancelTo":22,"mult":1.0,"poise":8,"recovery":12,"startup":6},{"active":5,"advanceM":1.0,"cancelFrom":13,"cancelTo":26,"mult":1.3,"poise":14,"recovery":16,"startup":9},{"active":6,"advanceM":1.4,"cancelFrom":0,"cancelTo":0,"finisher":true,"mult":2.0,"poise":30,"recovery":28,"startup":14}],"id":"espadachim","name":"Espadachim","role":"Dano corpo a corpo/combo","skillId":"espadachim_corte_crescente","weapon":"Duas espadas"},{"base":{"atk":9,"def":12,"mana":60,"maxHp":140,"stamina":120,"walkSpeedMps":5.5},"basicChain":[{"active":5,"advanceM":0.4,"cancelFrom":12,"cancelTo":24,"mult":0.9,"poise":10,"recovery":14,"startup":9},{"active":5,"advanceM":0.4,"cancelFrom":11,"cancelTo":24,"mult":1.0,"poise":10,"recovery":14,"startup":8},{"active":6,"advanceM":0.8,"cancelFrom":15,"cancelTo":28,"mult":1.2,"poise":16,"recovery":18,"startup":11},{"active":7,"advanceM":1.0,"cancelFrom":0,"cancelTo":0,"finisher":true,"mult":1.8,"poise":32,"recovery":30,"startup":16}],"id":"guardiao","name":"Guardião","provisional":true,"role":"Tank/controle","skillId":"guardiao_provocacao","weapon":"Escudo e arma"},{"base":{"atk":11,"def":4,"mana":80,"maxHp":90,"stamina":90,"walkSpeedMps":6},"basicChain":[{"active":3,"advanceM":0,"cancelFrom":10,"cancelTo":22,"mult":1.0,"poise":6,"recovery":12,"startup":8},{"active":3,"advanceM":0,"cancelFrom":10,"cancelTo":22,"mult":1.0,"poise":6,"recovery":12,"startup":8},{"active":3,"advanceM":0,"cancelFrom":12,"cancelTo":24,"mult":1.2,"poise":8,"recovery":14,"startup":10},{"active":4,"advanceM":0,"cancelFrom":0,"cancelTo":0,"finisher":true,"mult":2.2,"poise":20,"recovery":26,"startup":16}],"id":"atirador","name":"Atirador","provisional":true,"role":"Dano à distância","skillId":"atirador_disparo_rapido","weapon":"Espingarda"},{"base":{"atk":8,"def":6,"mana":140,"maxHp":95,"stamina":90,"walkSpeedMps":5.5},"basicChain":[{"active":4,"advanceM":0.5,"cancelFrom":11,"cancelTo":23,"mult":0.8,"poise":6,"recovery":13,"startup":9},{"active":4,"advanceM":0.5,"cancelFrom":10,"cancelTo":23,"mult":0.9,"poise":6,"recovery":13,"startup":8},{"active":5,"advanceM":0.8,"cancelFrom":13,"cancelTo":25,"mult":1.1,"poise":10,"recovery":15,"startup":10},{"active":6,"advanceM":1.0,"cancelFrom":0,"cancelTo":0,"finisher":true,"mult":1.7,"poise":24,"recovery":28,"startup":15}],"id":"clerigo","name":"Clérigo","provisional":true,"role":"Suporte/cura sagrada","skillId":"clerigo_bencao_solar","weapon":"Foco sagrado"}]
+[
+  {
+    "base": {
+      "atk": 10,
+      "def": 5,
+      "mana": 100,
+      "maxHp": 100,
+      "stamina": 100,
+      "walkSpeedMps": 6
+    },
+    "basicChain": [
+      {
+        "active": 4,
+        "advanceM": 0.6,
+        "cancelFrom": 10,
+        "cancelTo": 22,
+        "mult": 0.9,
+        "poise": 8,
+        "recovery": 12,
+        "startup": 7
+      },
+      {
+        "active": 4,
+        "advanceM": 0.6,
+        "cancelFrom": 9,
+        "cancelTo": 22,
+        "mult": 1.0,
+        "poise": 8,
+        "recovery": 12,
+        "startup": 6
+      },
+      {
+        "active": 5,
+        "advanceM": 1.0,
+        "cancelFrom": 13,
+        "cancelTo": 26,
+        "mult": 1.3,
+        "poise": 14,
+        "recovery": 16,
+        "startup": 9
+      },
+      {
+        "active": 6,
+        "advanceM": 1.4,
+        "cancelFrom": 0,
+        "cancelTo": 0,
+        "finisher": true,
+        "mult": 2.0,
+        "poise": 30,
+        "recovery": 28,
+        "startup": 14
+      }
+    ],
+    "growthPerLevel": {
+      "maxHp": 12,
+      "atk": 2.2,
+      "def": 0.8,
+      "stamina": 2,
+      "mana": 3
+    },
+    "id": "espadachim",
+    "name": "Espadachim",
+    "role": "Dano corpo a corpo/combo",
+    "skillId": "espadachim_corte_crescente",
+    "weapon": "Duas espadas"
+  },
+  {
+    "base": {
+      "atk": 9,
+      "def": 12,
+      "mana": 60,
+      "maxHp": 140,
+      "stamina": 120,
+      "walkSpeedMps": 5.5
+    },
+    "basicChain": [
+      {
+        "active": 5,
+        "advanceM": 0.4,
+        "cancelFrom": 12,
+        "cancelTo": 24,
+        "mult": 0.9,
+        "poise": 10,
+        "recovery": 14,
+        "startup": 9
+      },
+      {
+        "active": 5,
+        "advanceM": 0.4,
+        "cancelFrom": 11,
+        "cancelTo": 24,
+        "mult": 1.0,
+        "poise": 10,
+        "recovery": 14,
+        "startup": 8
+      },
+      {
+        "active": 6,
+        "advanceM": 0.8,
+        "cancelFrom": 15,
+        "cancelTo": 28,
+        "mult": 1.2,
+        "poise": 16,
+        "recovery": 18,
+        "startup": 11
+      },
+      {
+        "active": 7,
+        "advanceM": 1.0,
+        "cancelFrom": 0,
+        "cancelTo": 0,
+        "finisher": true,
+        "mult": 1.8,
+        "poise": 32,
+        "recovery": 30,
+        "startup": 16
+      }
+    ],
+    "growthPerLevel": {
+      "maxHp": 18,
+      "atk": 1.8,
+      "def": 1.5,
+      "stamina": 3,
+      "mana": 1
+    },
+    "id": "guerreiro",
+    "name": "Guerreiro",
+    "provisional": true,
+    "role": "Tank/controle",
+    "skillId": "guerreiro_provocacao",
+    "weapon": "Escudo e arma"
+  },
+  {
+    "base": {
+      "atk": 11,
+      "def": 4,
+      "mana": 80,
+      "maxHp": 90,
+      "stamina": 90,
+      "walkSpeedMps": 6
+    },
+    "basicChain": [
+      {
+        "active": 3,
+        "advanceM": 0,
+        "cancelFrom": 10,
+        "cancelTo": 22,
+        "mult": 1.0,
+        "poise": 6,
+        "recovery": 12,
+        "startup": 8
+      },
+      {
+        "active": 3,
+        "advanceM": 0,
+        "cancelFrom": 10,
+        "cancelTo": 22,
+        "mult": 1.0,
+        "poise": 6,
+        "recovery": 12,
+        "startup": 8
+      },
+      {
+        "active": 3,
+        "advanceM": 0,
+        "cancelFrom": 12,
+        "cancelTo": 24,
+        "mult": 1.2,
+        "poise": 8,
+        "recovery": 14,
+        "startup": 10
+      },
+      {
+        "active": 4,
+        "advanceM": 0,
+        "cancelFrom": 0,
+        "cancelTo": 0,
+        "finisher": true,
+        "mult": 2.2,
+        "poise": 20,
+        "recovery": 26,
+        "startup": 16
+      }
+    ],
+    "growthPerLevel": {
+      "maxHp": 10,
+      "atk": 2.6,
+      "def": 0.6,
+      "stamina": 2,
+      "mana": 2
+    },
+    "id": "atirador",
+    "name": "Atirador",
+    "role": "Dano à distância",
+    "skillId": "atirador_disparo_rapido",
+    "weapon": "Espingarda"
+  },
+  {
+    "base": {
+      "atk": 8,
+      "def": 6,
+      "mana": 140,
+      "maxHp": 95,
+      "stamina": 90,
+      "walkSpeedMps": 5.5
+    },
+    "basicChain": [
+      {
+        "active": 4,
+        "advanceM": 0.5,
+        "cancelFrom": 11,
+        "cancelTo": 23,
+        "mult": 0.8,
+        "poise": 6,
+        "recovery": 13,
+        "startup": 9
+      },
+      {
+        "active": 4,
+        "advanceM": 0.5,
+        "cancelFrom": 10,
+        "cancelTo": 23,
+        "mult": 0.9,
+        "poise": 6,
+        "recovery": 13,
+        "startup": 8
+      },
+      {
+        "active": 5,
+        "advanceM": 0.8,
+        "cancelFrom": 13,
+        "cancelTo": 25,
+        "mult": 1.1,
+        "poise": 10,
+        "recovery": 15,
+        "startup": 10
+      },
+      {
+        "active": 6,
+        "advanceM": 1.0,
+        "cancelFrom": 0,
+        "cancelTo": 0,
+        "finisher": true,
+        "mult": 1.7,
+        "poise": 24,
+        "recovery": 28,
+        "startup": 15
+      }
+    ],
+    "growthPerLevel": {
+      "maxHp": 11,
+      "atk": 1.6,
+      "def": 0.9,
+      "stamina": 2,
+      "mana": 5
+    },
+    "id": "curandeiro",
+    "name": "Curandeiro",
+    "provisional": true,
+    "role": "Suporte/cura sagrada",
+    "skillId": "curandeiro_bencao_solar",
+    "weapon": "Foco sagrado"
+  }
+]
