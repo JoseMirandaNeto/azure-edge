@@ -17,7 +17,12 @@ services:
     name: azure-edge-server-game
     runtime: node
     plan: free
-    buildCommand: find . -name 'tsconfig.tsbuildinfo' -not -path '*/node_modules/*' -delete; npm i -g pnpm@9.15.9 && pnpm install --frozen-lockfile && pnpm build
+    # Build command verified live on Render 2026-11-14 (deploy dep-dbrsstui0phs73bef7h0):
+    # `npm i -g pnpm` FAILS on Render with EROFS (read-only /usr/lib/node_modules),
+    # and with NODE_ENV=production pnpm skips devDeps so `turbo` is not found.
+    # The command below uses Render's preinstalled pnpm with NODE_ENV=development.
+    # Keep this in sync with the dashboard setting — a Blueprint sync restores it.
+    buildCommand: find . -name 'tsconfig.tsbuildinfo' -not -path '*/node_modules/*' -delete; NODE_ENV=development pnpm install --frozen-lockfile && pnpm build
     startCommand: pnpm --filter @azure-edge/server-game start
     healthCheckPath: /healthz
     envVars:
