@@ -40,9 +40,14 @@ const paramArmor = params.get("armor") ?? null;
 const paramZone = params.get("zone") ?? null;
 const paramDungeon = params.get("dungeon") ?? null;
 const cameraMode = parseCameraMode(params.get("camera"));
-/** M2.5 test: `?char=warrior` renders the rigged GLB character instead of
- * the CharForge procedural build (skips the creator, Espadachim by default). */
-const useGlbCharacter = params.get("char") === "warrior";
+/** Character mesh: `?char=warrior` forces the rigged GLB (skips the creator,
+ *  Espadachim by default); `?char=capsule` forces the CharForge/capsule
+ *  placeholder; default (no param) is the GLB for everyone — loaded in the
+ *  background at boot, CharForge until it arrives, permanent fallback if
+ *  the load fails. */
+const charParam = params.get("char");
+const charMode: "auto" | "glb" | "capsule" =
+  charParam === "capsule" ? "capsule" : charParam === "warrior" ? "glb" : "auto";
 const GLB_CHARACTER_URL = "/assets/characters/warrior_f_r64_final.glb";
 // Deploy-ready: on an https:// page the browser blocks plain ws://
 // (mixed content), so default to wss:// there. `?server=` still wins,
@@ -685,13 +690,17 @@ async function startGame(genome: CharacterGenome, name: string): Promise<void> {
   const zone = paramZone ? zoneById(paramZone) : undefined;
   const zoneId = dungeon ? undefined : (zone?.zone.id ?? "cidade_serket");
   zoneLabel = dungeon ? dungeon.name : (zone?.zone.name ?? "Cidade de Serket");
+  view.setCharMode(charMode);
   await view.init(zoneId, dungeon?.id);
   view.setArmor(currentArmorId);
-  if (useGlbCharacter) {
-    const ok = await view.useGlbCharacter(GLB_CHARACTER_URL);
-    if (!ok) view.setLocalGenome(genome);
-  } else {
+  if (charMode === "capsule") {
     view.setLocalGenome(genome);
+  } else {
+    // GLB first (background, non-blocking): the CharForge build renders
+    // until the GLB arrives, then local + remote players swap to GLB
+    // clones; if the load fails the CharForge mesh stays as the fallback.
+    view.setLocalGenome(genome);
+    void view.loadGlbCharacter(GLB_CHARACTER_URL);
   }
   playerEl.textContent = `backend: ${view.backend} · servidor ${serverUrl}`;
   client.connect(playerName, {
@@ -712,6 +721,8 @@ document.getElementById("btn-personagem")?.addEventListener("click", () => {
     currentGenome = result.genome;
     playerName = result.name || playerName;
     classLabel = classById(result.genome.classId)?.name ?? "Espadachim";
+    // setLocalGenome re-applies the GLB (with the new class/gender) when
+    // the template is loaded; otherwise it rebuilds the CharForge mesh.
     view.setLocalGenome(result.genome);
   })();
 });
@@ -719,15 +730,17 @@ document.getElementById("btn-personagem")?.addEventListener("click", () => {
 /**
  * Boot: no saved genome (or `?creator=1`) → the creator runs first
  * (class first, then customization); otherwise straight into the zone.
- * `?char=warrior` skips the creator (default Espadachim genome) and loads
- * the rigged GLB character instead of the CharForge build.
+ * `?char=warrior` skips the creator (default Espadachim genome) and forces
+ * the rigged GLB character; without it the GLB still becomes the default
+ * mesh (loaded in the background by startGame), and `?char=capsule`
+ * forces the CharForge/capsule placeholder for debug.
  * `?class=` / `?gender=` override the genome in-memory (no save) so the
  * vertical slice can be tested straight from a URL.
  */
 async function boot(): Promise<void> {
   let genome = loadSavedGenome();
   let name = params.get("name") ?? "";
-  const quickClass = paramClass ?? (useGlbCharacter ? classById("espadachim") : null);
+  const quickClass = paramClass ?? (charMode === "glb" ? classById("espadachim") : null);
   if (quickClass && !genome) {
     genome = applyClassPreset(generateGenome(20261112, { gender: paramGender }), quickClass.id as CharacterGenome["classId"]);
   } else if (!genome || params.has("creator")) {

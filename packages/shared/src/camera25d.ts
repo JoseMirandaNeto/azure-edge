@@ -11,8 +11,8 @@
 export const CAMERA_25D = {
   /** Fixed oblique elevation. */
   elevationDeg: 38,
-  /** Fixed follow distance (m). */
-  distanceM: 14,
+  /** Fixed follow distance (m). 12 m keeps the 1.75 m hero readable. */
+  distanceM: 12,
   /** Wheel zoom range (m). */
   zoomMinM: 10,
   zoomMaxM: 20,
