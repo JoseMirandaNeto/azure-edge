@@ -49,6 +49,7 @@ const charParam = params.get("char");
 const charMode: "auto" | "glb" | "capsule" =
   charParam === "capsule" ? "capsule" : charParam === "warrior" ? "glb" : "auto";
 const GLB_CHARACTER_URL = "/assets/characters/warrior_f_r64_final.glb";
+const GLB_MALE_URL = "/assets/characters/warrior_m_r64_final_apose.glb";
 // Deploy-ready: on an https:// page the browser blocks plain ws://
 // (mixed content), so default to wss:// there. `?server=` still wins,
 // then the build-time VITE_GAME_SERVER_URL (e.g. wss://…onrender.com).
@@ -236,7 +237,7 @@ function startLocalAttack(): void {
   } else {
     return;
   }
-  view.showSwingFor(playerId ?? -1, predicted.x, predicted.y, cameraYaw, 2.5, 140, 0x9fd8ff);
+  view.showSwingFor(playerId ?? -1, predicted.x, predicted.y, cameraMode === "2.5d" ? predicted.yaw : cameraYaw, 2.5, 140, 0x9fd8ff);
 }
 
 function startLocalDodge(): void {
@@ -260,7 +261,7 @@ function startLocalSkill(): void {
   if (localVisual.state !== "idle") return;
   localVisual.state = "skill";
   localVisual.frame = 0;
-  view.showSwingFor(playerId ?? -1, predicted.x, predicted.y, cameraYaw, 3.2, 140, 0x66aaff);
+  view.showSwingFor(playerId ?? -1, predicted.x, predicted.y, cameraMode === "2.5d" ? predicted.yaw : cameraYaw, 3.2, 140, 0x66aaff);
 }
 
 function cancelLocalVisual(): void {
@@ -509,8 +510,12 @@ function frame(now: number): void {
           const [a0, a1] = chainActiveRange(hit);
           if (localVisual.frame >= a0 && localVisual.frame < a1) {
             const perFrame = hit.advanceM / hit.active;
-            predicted.x += Math.sin(cameraYaw) * perFrame;
-            predicted.y += Math.cos(cameraYaw) * perFrame;
+            // Lunge toward the facing yaw (2.5D: predicted.yaw) — the
+            // server lunges along p.yaw, so the prediction must match it
+            // (cameraYaw is 0 in 2.5D and lunged north from every facing).
+            const lungeYaw = cameraMode === "2.5d" ? predicted.yaw : cameraYaw;
+            predicted.x += Math.sin(lungeYaw) * perFrame;
+            predicted.y += Math.cos(lungeYaw) * perFrame;
           }
           if (localVisual.frame >= chainTotalFrames(hit)) {
             localVisual.state = "idle";
@@ -529,13 +534,32 @@ function frame(now: number): void {
       } else if (localVisual.state === "guard") {
         // Guard is stationary; no walk prediction while held.
       } else {
+        // stepMovement overwrites yaw with the input (camera) yaw — in
+        // 2.5D that is 0, which snapped the hero back to facing north the
+        // instant she stopped walking. Keep the facing: movement direction
+        // while walking, last facing while idle.
+        const facingYaw = predicted.yaw;
         predicted = stepMovement(predicted, { moveX, moveY, yaw: cameraYaw }, step, walkSpeedMps);
-        // 2.5D: face the movement direction (fixed camera, no orbit yaw).
-        if (cameraMode === "2.5d" && predicted.moving) {
-          predicted.yaw = Math.atan2(moveX, moveY);
+        if (cameraMode === "2.5d") {
+          predicted.yaw = predicted.moving ? Math.atan2(moveX, moveY) : facingYaw;
         }
       }
-      lastInput = { seq, tick, moveX, moveY, yaw: cameraMode === "2.5d" ? predicted.yaw : cameraYaw, buttons: 0, skillId: 0 };
+      // 2.5D: the server runs stepMovement with input.yaw as BOTH the
+      // movement frame and the facing yaw, while the client predicts with
+      // the fixed camera yaw (0). Sending the raw screen-relative move
+      // with the facing yaw walked S/D/A the wrong way server-side (S
+      // walked the player north). Rotate the move into the facing frame
+      // so the server reproduces the client's world-space move: R(-yaw).
+      const sendYaw = cameraMode === "2.5d" ? predicted.yaw : cameraYaw;
+      let sendMoveX = moveX;
+      let sendMoveY = moveY;
+      if (cameraMode === "2.5d") {
+        const sin = Math.sin(predicted.yaw);
+        const cos = Math.cos(predicted.yaw);
+        sendMoveX = moveX * cos - moveY * sin;
+        sendMoveY = moveX * sin + moveY * cos;
+      }
+      lastInput = { seq, tick, moveX: sendMoveX, moveY: sendMoveY, yaw: sendYaw, buttons: 0, skillId: 0 };
     }
     if (acc > 0.25) acc = 0; // don't spiral after a hit-stop / tab switch
   }
@@ -701,6 +725,7 @@ async function startGame(genome: CharacterGenome, name: string): Promise<void> {
     // clones; if the load fails the CharForge mesh stays as the fallback.
     view.setLocalGenome(genome);
     void view.loadGlbCharacter(GLB_CHARACTER_URL);
+    void view.loadGlbMaleCharacter(GLB_MALE_URL);
   }
   playerEl.textContent = `backend: ${view.backend} · servidor ${serverUrl}`;
   client.connect(playerName, {

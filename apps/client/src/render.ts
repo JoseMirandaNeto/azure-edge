@@ -145,9 +145,168 @@ function makePlaceholder(
 }
 
 /**
- * Procedural mob placeholder (M1): color/scale come from gamedata.
- * Insectoids (escorpião/formiga/besouro) are horizontal with a stinger/tail;
- * the múmia stands upright like a player capsule. No external assets.
+ * Detailed procedural scorpion (escorpião): segmented body, tail arched
+ * over the back with a stinger, two pincers, 8 legs, glowing eyes.
+ * Forward is -Z (like the old placeholder: head at -Z, tail at +Z).
+ * Returns the group, the telegraph ring, and the tail group (animated).
+ */
+function makeScorpion(color: number, scale: number): { group: THREE.Group; ring: THREE.Mesh; tail: THREE.Group } {
+  const g = new THREE.Group();
+  const shell = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.15 });
+  const dark = new THREE.MeshStandardMaterial({ color: 0x2a1a0e, roughness: 0.7 });
+  const plate = new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 0.5, metalness: 0.2 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xff3020, roughness: 0.3, emissive: 0xcc1100, emissiveIntensity: 1.8 });
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    g.add(m);
+    return m;
+  };
+  // Segmented body: cephalothorax + two abdomen segments (flattened spheres).
+  const ceph = add(new THREE.SphereGeometry(0.5, 14, 10), shell, 0, 0.42, -0.2);
+  ceph.scale.set(1.05, 0.62, 1.15);
+  const abd1 = add(new THREE.SphereGeometry(0.46, 14, 10), plate, 0, 0.42, 0.35);
+  abd1.scale.set(1, 0.6, 0.9);
+  const abd2 = add(new THREE.SphereGeometry(0.38, 12, 10), shell, 0, 0.44, 0.78);
+  abd2.scale.set(0.95, 0.6, 0.85);
+  // Eyes: two glowing red dots on the front of the cephalothorax.
+  add(new THREE.SphereGeometry(0.06, 8, 6), eyeMat, -0.13, 0.62, -0.62);
+  add(new THREE.SphereGeometry(0.06, 8, 6), eyeMat, 0.13, 0.62, -0.62);
+  // Tail: 4 segments rising almost vertically off the rear + stinger cone.
+  // Near-vertical on purpose (top ~1.9 m): the old forward-leaning arch
+  // foreshortened into the body from the fixed south camera and the tail
+  // vanished. A tall rear arch reads as a scorpion from any angle.
+  const tail = new THREE.Group();
+  const tailSegs: Array<[number, number, number, number]> = [
+    [0, 0.62, 1.02, 0.19],
+    [0, 1.0, 1.08, 0.17],
+    [0, 1.38, 1.02, 0.15],
+    [0, 1.66, 0.82, 0.13],
+  ];
+  for (const [x, y, z, r] of tailSegs) {
+    const s = new THREE.Mesh(new THREE.SphereGeometry(r, 10, 8), shell);
+    s.position.set(x, y, z);
+    tail.add(s);
+  }
+  const stinger = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.55, 8), dark);
+  stinger.position.set(0, 1.78, 0.55);
+  stinger.rotation.x = Math.PI * 0.7; // tip points forward-down
+  tail.add(stinger);
+  g.add(tail);
+  // Pincers: arm cylinders + fixed claw + movable claw cone, both sides.
+  for (const side of [-1, 1]) {
+    const arm = add(new THREE.CylinderGeometry(0.09, 0.11, 0.55, 8), shell, side * 0.55, 0.42, -0.6);
+    arm.rotation.set(Math.PI / 2 - 0.25, 0, side * 0.5);
+    const palm = add(new THREE.BoxGeometry(0.16, 0.12, 0.34), plate, side * 0.78, 0.42, -1.0);
+    palm.rotation.y = side * 0.15;
+    const clawFixed = add(new THREE.ConeGeometry(0.06, 0.32, 6), dark, side * 0.82, 0.44, -1.28);
+    clawFixed.rotation.x = -Math.PI / 2;
+    const clawMove = add(new THREE.ConeGeometry(0.05, 0.26, 6), dark, side * 0.72, 0.48, -1.26);
+    clawMove.rotation.x = -Math.PI / 2;
+    clawMove.rotation.z = side * 0.35;
+  }
+  // 8 legs: one thin cylinder each, angled down-out (4 per side).
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 4; i += 1) {
+      const z = -0.45 + i * 0.42;
+      const leg = add(new THREE.CylinderGeometry(0.045, 0.03, 0.75, 6), dark, side * 0.62, 0.28, z);
+      leg.rotation.z = side * 1.05;
+      leg.rotation.x = (i - 1.5) * 0.12;
+    }
+  }
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.9, 1.1, 32),
+    new THREE.MeshBasicMaterial({ color: 0xff2a1a, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }),
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.03;
+  ring.visible = false;
+  g.add(ring);
+  g.scale.setScalar(scale);
+  return { group: g, ring, tail };
+}
+
+/**
+ * Detailed procedural mummy (múmia): upright bandaged body, wrap strips
+ * around torso/head, arms raised forward, glowing eyes, tattered strips
+ * hanging from the waist. Forward is -Z.
+ */
+function makeMummy(color: number, scale: number): { group: THREE.Group; ring: THREE.Mesh } {
+  const g = new THREE.Group();
+  const wrap = new THREE.MeshStandardMaterial({ color, roughness: 0.95 });
+  const wrapDark = new THREE.MeshStandardMaterial({ color: 0xb8a888, roughness: 0.95 });
+  const wrapLight = new THREE.MeshStandardMaterial({ color: 0xe8dfc8, roughness: 0.9 });
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xffd24a, roughness: 0.3, emissive: 0xffb400, emissiveIntensity: 2.2 });
+  const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number): THREE.Mesh => {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    g.add(m);
+    return m;
+  };
+  const body = add(new THREE.CapsuleGeometry(0.37, 0.9, 4, 12), wrap, 0, 0.95, 0);
+  void body;
+  // Wrap strips around the torso: only 4, thin, so they read as bandages
+  // on a body instead of a stack of rings (the first version looked like
+  // a beehive). Alternating tones, slightly proud of the capsule.
+  const stripYs = [0.62, 0.9, 1.18, 1.44];
+  stripYs.forEach((y, i) => {
+    const strip = add(
+      new THREE.TorusGeometry(0.375, 0.035, 6, 16),
+      i % 2 === 0 ? wrapDark : wrapLight,
+      0, y, 0,
+    );
+    strip.rotation.x = Math.PI / 2;
+  });
+  // Two diagonal strips across the chest.
+  const diag1 = add(new THREE.BoxGeometry(0.09, 0.85, 0.04), wrapLight, 0.08, 1.2, -0.33);
+  diag1.rotation.z = 0.6;
+  const diag2 = add(new THREE.BoxGeometry(0.09, 0.85, 0.04), wrapDark, -0.08, 1.2, -0.33);
+  diag2.rotation.z = -0.6;
+  // Head + wrap strips + glowing eyes (bigger, so they read at 8.5 m).
+  add(new THREE.SphereGeometry(0.3, 16, 12), wrap, 0, 1.85, 0);
+  const brow = add(new THREE.TorusGeometry(0.29, 0.04, 6, 16), wrapDark, 0, 1.97, 0);
+  brow.rotation.x = Math.PI / 2 - 0.35;
+  const chin = add(new THREE.TorusGeometry(0.28, 0.04, 6, 16), wrapLight, 0, 1.72, 0);
+  chin.rotation.x = Math.PI / 2 + 0.2;
+  add(new THREE.SphereGeometry(0.08, 8, 6), eyeMat, -0.11, 1.88, -0.26);
+  add(new THREE.SphereGeometry(0.08, 8, 6), eyeMat, 0.11, 1.88, -0.26);
+  // Arms raised forward (classic shambling pose), bandaged, thicker so the
+  // reach reads at distance.
+  for (const side of [-1, 1]) {
+    const arm = add(new THREE.CylinderGeometry(0.11, 0.1, 0.72, 8), wrap, side * 0.32, 1.28, -0.32);
+    arm.rotation.x = -1.25;
+    add(new THREE.SphereGeometry(0.11, 8, 6), wrapDark, side * 0.32, 1.42, -0.62);
+    const cuff = add(new THREE.TorusGeometry(0.12, 0.035, 6, 10), wrapLight, side * 0.32, 1.18, -0.18);
+    cuff.rotation.x = Math.PI / 2 - 1.25;
+  }
+  // Loose sash from the shoulder: breaks the torso's symmetry so the
+  // silhouette isn't just stacked bands.
+  const sash = add(new THREE.BoxGeometry(0.12, 0.95, 0.03), wrapDark, 0.2, 1.05, -0.38);
+  sash.rotation.z = 0.35;
+  // Legs (bandaged, slightly apart) + tattered waist strips.
+  add(new THREE.CylinderGeometry(0.12, 0.1, 0.55, 8), wrapDark, -0.16, 0.3, 0);
+  add(new THREE.CylinderGeometry(0.12, 0.1, 0.55, 8), wrapDark, 0.16, 0.3, 0);
+  const tatXs = [-0.25, 0, 0.25];
+  tatXs.forEach((x, i) => {
+    const strip = add(new THREE.BoxGeometry(0.09, 0.4 + i * 0.08, 0.02), i % 2 === 0 ? wrapDark : wrapLight, x, 0.42, -0.36);
+    strip.rotation.x = 0.1;
+    strip.rotation.z = (i - 1) * 0.12;
+  });
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.9, 1.1, 32),
+    new THREE.MeshBasicMaterial({ color: 0xff2a1a, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }),
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.03;
+  ring.visible = false;
+  g.add(ring);
+  g.scale.setScalar(scale);
+  return { group: g, ring };
+}
+/**
+ * Generic procedural mob placeholder (formiga/besouro/golem/cultista/serket):
+ * color/scale come from gamedata. Horizontal insectoids get a stinger/tail;
+ * upright mobs stand like a player capsule. No external assets.
  * Returns the group plus the telegraph ring (shown during windup, animState 9).
  */
 function makeMob(color: number, scale: number, upright: boolean): { group: THREE.Group; ring: THREE.Mesh } {
@@ -293,6 +452,8 @@ interface GlbRig {
   /** Walk-cycle phase (radians), advanced only while animState == 1. */
   phase: number;
   lastT: number;
+  /** Static (unrigged) mesh root for whole-body procedural animation. */
+  staticRoot: THREE.Group | null;
 }
 
 const _poseEuler = new THREE.Euler();
@@ -484,6 +645,135 @@ function makeHandShield(mats: ReturnType<typeof glbWeaponMats>): THREE.Group {
   return g;
 }
 
+// ---------------------------------------------------------------------------
+// Procedural ground textures (canvas, seeded — no external assets).
+// One 512² tile per biome; vertex colors still tint the terrain, so the
+// canvas stays bright (values ~0.7–1.0) and the map multiplies, not buries.
+// The same canvas doubles as a bump map for a little surface relief.
+// ---------------------------------------------------------------------------
+
+type GroundKind = "city" | "desert" | "dungeon";
+
+/** Brightness jitter helper: draw `n` speckles of a color at random spots. */
+function speckle(
+  ctx: CanvasRenderingContext2D,
+  rng: () => number,
+  size: number,
+  n: number,
+  color: string,
+  alphaMin: number,
+  alphaMax: number,
+  rMin: number,
+  rMax: number,
+): void {
+  for (let i = 0; i < n; i += 1) {
+    ctx.globalAlpha = alphaMin + rng() * (alphaMax - alphaMin);
+    ctx.fillStyle = color;
+    const r = rMin + rng() * (rMax - rMin);
+    ctx.beginPath();
+    ctx.arc(rng() * size, rng() * size, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+}
+
+function makeGroundTexture(kind: GroundKind): THREE.CanvasTexture {
+  const size = 512;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("2d canvas context unavailable for ground texture");
+  const rng = sfc32(kind === "city" ? 20261121 : kind === "desert" ? 20261122 : 20261123);
+  if (kind === "city") {
+    // Stone pavers: 8x8 grid, each paver a slightly different warm tone,
+    // dark grout between them, worn blotches + speckle.
+    ctx.fillStyle = "#8a7a5f";
+    ctx.fillRect(0, 0, size, size);
+    const cell = size / 8;
+    for (let gy = 0; gy < 8; gy += 1) {
+      for (let gx = 0; gx < 8; gx += 1) {
+        const v = 0.78 + rng() * 0.18;
+        const warm = rng() * 14 - 4;
+        ctx.fillStyle = `rgb(${Math.round(216 * v + warm)},${Math.round(203 * v)},${Math.round(176 * v)})`;
+        ctx.fillRect(gx * cell + 2, gy * cell + 2, cell - 4, cell - 4);
+        // One darker corner chip per paver, so no two pavers read alike.
+        ctx.globalAlpha = 0.12 + rng() * 0.12;
+        ctx.fillStyle = "#6b5a40";
+        ctx.fillRect(gx * cell + 2 + rng() * cell * 0.5, gy * cell + 2 + rng() * cell * 0.5, cell * 0.3, cell * 0.25);
+        ctx.globalAlpha = 1;
+      }
+    }
+    speckle(ctx, rng, size, 1400, "#5a4a30", 0.05, 0.16, 0.5, 2);
+    speckle(ctx, rng, size, 700, "#fff8e0", 0.05, 0.14, 0.5, 1.6);
+  } else if (kind === "desert") {
+    // Sand: warm base, big soft tonal blotches, faint wind-ripple bands,
+    // heavy speckle so the dunes stop reading as a flat color.
+    ctx.fillStyle = "#e3c184";
+    ctx.fillRect(0, 0, size, size);
+    for (let i = 0; i < 26; i += 1) {
+      const x = rng() * size;
+      const y = rng() * size;
+      const r = 40 + rng() * 110;
+      const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+      const light = rng() > 0.5;
+      grad.addColorStop(0, light ? "rgba(240,212,154,0.35)" : "rgba(190,150,90,0.30)");
+      grad.addColorStop(1, "rgba(227,193,132,0)");
+      ctx.fillStyle = grad;
+      ctx.fillRect(x - r, y - r, r * 2, r * 2);
+    }
+    // Ripple bands: wavy horizontal darker strokes.
+    ctx.strokeStyle = "rgba(180,140,80,0.22)";
+    ctx.lineWidth = 3;
+    for (let y = 8; y < size; y += 22) {
+      ctx.beginPath();
+      for (let x = 0; x <= size; x += 16) {
+        const yy = y + Math.sin(x * 0.02 + y) * 5;
+        if (x === 0) ctx.moveTo(x, yy);
+        else ctx.lineTo(x, yy);
+      }
+      ctx.stroke();
+    }
+    speckle(ctx, rng, size, 2200, "#a8824a", 0.06, 0.2, 0.5, 2.2);
+    speckle(ctx, rng, size, 1200, "#f8e8b8", 0.06, 0.18, 0.5, 1.8);
+  } else {
+    // Dungeon: dark stone tiles, 4x4, varied gray-brown, dark grout, cracks.
+    ctx.fillStyle = "#241d16";
+    ctx.fillRect(0, 0, size, size);
+    const cell = size / 4;
+    for (let gy = 0; gy < 4; gy += 1) {
+      for (let gx = 0; gx < 4; gx += 1) {
+        const v = 0.62 + rng() * 0.22;
+        ctx.fillStyle = `rgb(${Math.round(122 * v)},${Math.round(106 * v)},${Math.round(88 * v)})`;
+        ctx.fillRect(gx * cell + 3, gy * cell + 3, cell - 6, cell - 6);
+      }
+    }
+    // Cracks: a few dark jagged polylines across random tiles.
+    ctx.strokeStyle = "rgba(20,14,10,0.55)";
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 7; i += 1) {
+      let x = rng() * size;
+      let y = rng() * size;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      for (let s = 0; s < 6; s += 1) {
+        x += (rng() - 0.5) * 60;
+        y += (rng() - 0.5) * 60;
+        ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    speckle(ctx, rng, size, 900, "#0f0b08", 0.08, 0.2, 0.5, 2);
+    speckle(ctx, rng, size, 500, "#cbbfa0", 0.05, 0.12, 0.5, 1.6);
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
 export class WorldView {
   backend: Backend = "webgl2";
   renderer!: RendererLike;
@@ -509,7 +799,7 @@ export class WorldView {
     /** Class the GLB weapon was attached for (weapons follow the hand bone). */
     glbWeaponClass?: string;
   }>();
-  private readonly mobs = new Map<number, { group: THREE.Group; ring: THREE.Mesh }>();
+  private readonly mobs = new Map<number, { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group }>();
   /** M2: the local player's CharForge character (LOD0). Null = capsule fallback. */
   private localCharacter: CharacterBuild | null = null;
   /** Last genome handed to setLocalGenome (gender for the GLB scale). */
@@ -518,6 +808,10 @@ export class WorldView {
   private glbTemplate: THREE.Group | null = null;
   private glbTriangles = 0;
   private glbLoadPromise: Promise<boolean> | null = null;
+  /** Real male mesh (warrior_m_r64_final_apose.glb, static, no rig). */
+  private glbTemplateM: THREE.Group | null = null;
+  private glbTrianglesM = 0;
+  private glbLoadPromiseM: Promise<boolean> | null = null;
   /** "auto" = GLB when it loads, CharForge/capsule until then (default);
    *  "glb" = force the GLB (?char=warrior); "capsule" = never load it. */
   private charMode: "auto" | "glb" | "capsule" = "auto";
@@ -531,6 +825,9 @@ export class WorldView {
   private readonly camPosTarget = new THREE.Vector3();
   private readonly camFocusTarget = new THREE.Vector3();
   private camReady = false;
+  /** Warm fill light that follows the local player (camera side) so the
+   *  hero reads bright like in Vindictus without blowing out the scene. */
+  private playerFill: THREE.PointLight | null = null;
   /** Camera juice: shake amplitude (decays) and FOV pulse (decays). */
   private shakeAmp = 0;
   private fovPulse = 0;
@@ -548,7 +845,7 @@ export class WorldView {
     this.cameraMode = mode;
   }
 
-  /** Wheel zoom for the 2.5D camera (clamped 10–20 m). */
+  /** Wheel zoom for the 2.5D camera (clamped 6–20 m). */
   setZoom25D(distanceM: number): void {
     this.zoom25D = clampCamera25DZoom(distanceM);
   }
@@ -643,6 +940,9 @@ export class WorldView {
       this.backend = "webgl2";
     }
     this.renderer = renderer;
+    // Slightly brighter exposure: the GLB albedo reads dark at the default.
+    const r = this.renderer as unknown as { toneMappingExposure?: number };
+    if (typeof r.toneMappingExposure === "number") r.toneMappingExposure = 1.15;
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.container.appendChild(this.renderer.domElement);
     window.addEventListener("resize", () => {
@@ -659,17 +959,29 @@ export class WorldView {
     if (this.dungeonId) {
       // Dungeon: dim cold ambient, weak warm sun leaking in — torches
       // (added in buildDungeon) do the local work, max 4 PointLights.
-      const hemi = new THREE.HemisphereLight(0x8a7aa0, 0x1a1410, 0.5);
+      const hemi = new THREE.HemisphereLight(0x8a7aa0, 0x1a1410, 0.75);
       const sun = new THREE.DirectionalLight(0xffd9a0, 0.5);
       sun.position.set(30, 50, -20);
       this.scene.add(hemi, sun);
+      // Same player fill as outdoors (dimmer, cooler) so the hero and the
+      // mummies still read in the dark hall.
+      this.playerFill = new THREE.PointLight(0xffe8c8, 16, 8, 1.6);
+      this.scene.add(this.playerFill);
       return;
     }
     const warmSun = this.activeZone.zone.id === "cidade_serket" ? 0xffe6b0 : this.activeZone.palette.sun;
-    const hemi = new THREE.HemisphereLight(0xffe9c4, new THREE.Color(this.activeZone.palette.ground).getHex(), 1.05);
-    const sun = new THREE.DirectionalLight(new THREE.Color(warmSun).getHex(), 2.0);
+    const hemi = new THREE.HemisphereLight(0xffe9c4, new THREE.Color(this.activeZone.palette.ground).getHex(), 1.3);
+    const sun = new THREE.DirectionalLight(new THREE.Color(warmSun).getHex(), 2.2);
     sun.position.set(30, 50, -20);
-    this.scene.add(hemi, sun);
+    // Rim light: cool, from the north (behind the hero as seen from the
+    // south-side 2.5D camera) so the silhouette edges glow against the ground.
+    const rim = new THREE.DirectionalLight(0xbfd4ff, 1.1);
+    rim.position.set(-10, 22, -45);
+    this.scene.add(hemi, sun, rim);
+    // Player fill: warm point light on the camera (south) side, follows the
+    // local player (positioned every frame in updateCamera).
+    this.playerFill = new THREE.PointLight(0xfff2dd, 14, 9, 1.6);
+    this.scene.add(this.playerFill);
   }
 
   private buildTerrain(): void {
@@ -690,8 +1002,10 @@ export class WorldView {
       c.copy(low).lerp(high, t);
       if (this.dungeonId) {
         // Dark stone floor: subtle 4 m checker so the flat floor still reads.
+        // Kept bright (the stone texture multiplies it) — the old dark
+        // values buried the texture entirely.
         const checker = (Math.floor(x / 4) + Math.floor(z / 4)) % 2 === 0 ? 0 : 1;
-        c.setHex(checker === 0 ? 0x4a4038 : 0x3d342c);
+        c.setHex(checker === 0 ? 0x9a8f80 : 0x847a6c);
       } else if (this.activeZone.zone.id === "cidade_serket") {
         // Stone plaza (r < 11) + two stone streets (spawn -> portais E/O and
         // spawn -> templo N / mercado S), the rest stays meadow.
@@ -706,7 +1020,19 @@ export class WorldView {
     }
     geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
     geo.computeVertexNormals();
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95 });
+    // Procedural ground texture (pavers / sand / stone tiles) with repeat so
+    // the floor stops reading as a flat color; same canvas as a bump map.
+    const kind: GroundKind = this.dungeonId ? "dungeon" : this.activeZone.zone.id === "cidade_serket" ? "city" : "desert";
+    const groundTex = makeGroundTexture(kind);
+    const repeat = size / 12;
+    groundTex.repeat.set(repeat, repeat);
+    const mat = new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.95,
+      map: groundTex,
+      bumpMap: groundTex,
+      bumpScale: 0.05,
+    });
     this.scene.add(new THREE.Mesh(geo, mat));
   }
 
@@ -962,10 +1288,13 @@ export class WorldView {
         treePos.map(([x, z]) => ({ x, y: this.terrainHeight(x, z) + 5.0, z })),
       ),
     );
-    // Lanterns along both streets (28, instanced post + small glowing box + cap).
+    // Lanterns along both streets (26, instanced post + small glowing box + cap).
+    // s = 0 is skipped on the north/south street rows: a lantern at (0, ±3.4)
+    // sits exactly on the spawn -> camera sightline and hides the hero.
     const lampPos: Array<[number, number]> = [];
     for (let s = -24; s <= 24; s += 8) {
-      lampPos.push([3.4, s], [-3.4, s], [s, 3.4], [s, -3.4]);
+      lampPos.push([3.4, s], [-3.4, s]);
+      if (s !== 0) lampPos.push([s, 3.4], [s, -3.4]);
     }
     this.scene.add(
       makeInstanced(
@@ -1292,7 +1621,7 @@ export class WorldView {
    */
   setLocalGenome(genome: CharacterGenome | null): void {
     this.lastGenome = genome;
-    if (genome && this.glbTemplate && this.charMode !== "capsule") {
+    if (genome && (this.glbTemplate || this.glbTemplateM) && this.charMode !== "capsule") {
       this.applyGlbLocal();
       return;
     }
@@ -1332,13 +1661,21 @@ export class WorldView {
     group: THREE.Group;
     rig: GlbRig;
   } | null {
-    if (!this.glbTemplate) return null;
-    const inner = cloneSkinned(this.glbTemplate) as THREE.Group;
+    const isMale = opts.gender === "m";
+    // Male players use the real male mesh (A-posed in Blender, no rig —
+    // whole-body procedural animation); until it loads, the female GLB
+    // is the fallback so no player is ever a capsule.
+    const template = isMale ? (this.glbTemplateM ?? this.glbTemplate) : this.glbTemplate;
+    if (!template) return null;
+    const inner = cloneSkinned(template) as THREE.Group;
     inner.rotation.y = Math.PI;
     const wrapper = new THREE.Group();
     wrapper.add(inner);
-    const isMale = opts.gender === "m";
-    wrapper.scale.set(1.75 * (isMale ? 1.08 : 1), 1.75 * (isMale ? 1.03 : 1), 1.75 * (isMale ? 1.08 : 1));
+    // Real male mesh is already male-proportioned (uniform 1.75); the
+    // female mesh keeps the old 1.08x/1.03x male widening only as fallback.
+    const maleScale = template === this.glbTemplateM ? 1 : isMale ? 1.08 : 1;
+    const maleHeight = template === this.glbTemplateM ? 1 : isMale ? 1.03 : 1;
+    wrapper.scale.set(1.75 * maleScale, 1.75 * maleHeight, 1.75 * maleScale);
     const bones = new Map<string, THREE.Bone>();
     const baseQuat = new Map<string, THREE.Quaternion>();
     const materials: THREE.MeshStandardMaterial[] = [];
@@ -1352,6 +1689,10 @@ export class WorldView {
         o.frustumCulled = false;
         if (o.material instanceof THREE.MeshStandardMaterial) {
           const cloned = o.material.clone();
+          // The graded albedo reads dark at 8.5 m — lift the base color
+          // ~18% (texture kept); baseColors store the lifted value so the
+          // armor tint math in applyArmorTint stays consistent.
+          cloned.color.multiplyScalar(1.18);
           o.material = cloned;
           materials.push(cloned);
           baseColors.push(cloned.color.clone());
@@ -1376,6 +1717,9 @@ export class WorldView {
       forearmL: bones.get("DEF-forearm.L") ?? null,
       phase: 0,
       lastT: performance.now(),
+      // Unrigged male mesh: no DEF bones — animateGlbRig drives the
+      // whole inner group instead (sway/lean/lunge).
+      staticRoot: bones.size === 0 ? inner : null,
     };
     if (opts.armor) this.applyArmorTint(rig, opts.armor);
     this.glbRigs.set(wrapper, rig);
@@ -1405,11 +1749,12 @@ export class WorldView {
 
   /** Use the GLB as the local player's mesh (fresh instance, own skeleton). */
   private applyGlbLocal(): void {
-    if (!this.glbTemplate) return;
+    if (!this.glbTemplate && !this.glbTemplateM) return;
     const inst = this.makeGlbInstance({ gender: this.lastGenome?.gender });
     if (!inst) return;
     this.clearLocalCharacter();
-    this.localCharacter = { group: inst.group, drawCalls: 1, triangles: this.glbTriangles, heightM: 1.75 };
+    const isMaleMesh = this.lastGenome?.gender === "m" && this.glbTemplateM !== null;
+    this.localCharacter = { group: inst.group, drawCalls: 1, triangles: isMaleMesh ? this.glbTrianglesM : this.glbTriangles, heightM: 1.75 };
     if (this.localId !== null) {
       const entry = this.players.get(this.localId);
       if (entry) {
@@ -1458,6 +1803,43 @@ export class WorldView {
   }
 
   /**
+   * Load the male GLB template (warrior_m_r64_final_apose.glb, static
+   * mesh, no rig). Same caching/rebuild behavior as loadGlbCharacter;
+   * male players fall back to the female GLB until this arrives.
+   */
+  async loadGlbMaleCharacter(url: string): Promise<boolean> {
+    if (this.glbTemplateM) return true;
+    if (!this.glbLoadPromiseM) {
+      const p = (async (): Promise<boolean> => {
+        try {
+          const gltf = await new GLTFLoader().loadAsync(url);
+          let triangles = 0;
+          gltf.scene.traverse((o) => {
+            if (o instanceof THREE.Mesh) {
+              const geo = o.geometry as THREE.BufferGeometry;
+              const posCount = geo.attributes.position?.count ?? 0;
+              triangles += (geo.index ? geo.index.count : posCount) / 3;
+            }
+          });
+          this.glbTemplateM = gltf.scene;
+          this.glbTrianglesM = Math.round(triangles);
+          if (this.charMode !== "capsule") {
+            this.applyGlbLocal();
+            this.rebuildAllPlayers();
+          }
+          return true;
+        } catch (err) {
+          console.warn("Male GLB failed to load, keeping female GLB fallback:", err);
+          this.glbLoadPromiseM = null;
+          return false;
+        }
+      })();
+      this.glbLoadPromiseM = p;
+    }
+    return this.glbLoadPromiseM;
+  }
+
+  /**
    * GLB character (M2.5 test): loads a rigged glTF character and uses it as
    * the local player's mesh instead of the CharForge build. Kept for the
    * `?char=warrior` alias — new code should use loadGlbCharacter, which
@@ -1478,6 +1860,32 @@ export class WorldView {
     const dt = Math.min(0.1, Math.max(0, (nowMs - rig.lastT) / 1000));
     rig.lastT = nowMs;
     if (animState === 1) rig.phase += dt * 7.5;
+    if (rig.staticRoot) {
+      // Unrigged male mesh: whole-body sway/lean/lunge on the inner
+      // group (rotation.y = PI stays untouched).
+      const tSec = nowMs / 1000;
+      let pitch = 0.02 + 0.015 * Math.sin(tSec * 1.6);
+      let roll = 0;
+      if (animState === 1) {
+        pitch = 0.07;
+        roll = 0.06 * Math.sin(rig.phase);
+      } else if (animState === 2) {
+        pitch = 0.18;
+        roll = 0.1;
+      } else if (animState === 3) {
+        pitch = 0.25;
+      } else if (animState === 4) {
+        pitch = 0.08;
+      }
+      const k = 1 - Math.exp(-dt / 0.07);
+      const cur = rig.current.get("static") ?? { x: 0, y: 0, z: 0 };
+      cur.x += (pitch - cur.x) * k;
+      cur.z += (roll - cur.z) * k;
+      rig.current.set("static", cur);
+      rig.staticRoot.rotation.x = cur.x;
+      rig.staticRoot.rotation.z = cur.z;
+      return;
+    }
     const target = glbPoseTarget(animState, nowMs / 1000, rig.phase);
     const k = 1 - Math.exp(-dt / 0.07);
     for (const [name, bone] of rig.bones) {
@@ -1521,7 +1929,7 @@ export class WorldView {
           rig = localRig;
           ringMat = localRig.ringMat;
         }
-      } else if (!isLocal && this.glbTemplate && this.charMode !== "capsule") {
+      } else if (!isLocal && (this.glbTemplate || this.glbTemplateM) && this.charMode !== "capsule") {
         const inst = this.makeGlbInstance({ gender: e.gender, armor });
         if (inst) {
           group = inst.group;
@@ -1606,22 +2014,39 @@ export class WorldView {
     }
   }
 
-  /** Mob placeholder from gamedata (color/scale by mobId); ring = windup telegraph. */
+  /** Mob mesh from gamedata (color/scale by mobId); ring = windup telegraph.
+   *  Escorpião and múmia get detailed procedural models; the rest keep the
+   *  generic placeholder. Stats/scale come from gamedata — visuals only. */
   updateMob(e: EntityState): void {
     let entry = this.mobs.get(e.id);
     if (!entry) {
       const data = MOBS.find((m) => m.id === e.mobId) ?? MOBS[0];
       const color = data ? Number.parseInt(data.color.slice(1), 16) : 0x888888;
       const scale = data?.scale ?? 1;
-      const { group, ring } = makeMob(color, scale, e.mobId === "mumia");
-      this.scene.add(group);
-      entry = { group, ring };
+      const mobId = e.mobId ?? "";
+      if (mobId === "escorpiao" || mobId === "escorpiao_alfa") {
+        const built = makeScorpion(color, scale);
+        this.scene.add(built.group);
+        entry = { group: built.group, ring: built.ring, tail: built.tail };
+      } else if (mobId === "mumia" || mobId === "mumia_ancia" || mobId === "neferet") {
+        const built = makeMummy(color, scale);
+        this.scene.add(built.group);
+        entry = { group: built.group, ring: built.ring };
+      } else {
+        const { group, ring } = makeMob(color, scale, mobId === "mumia");
+        this.scene.add(group);
+        entry = { group, ring };
+      }
       this.mobs.set(e.id, entry);
     }
     const [tx, , tz] = WORLD_TO_THREE(e.x, e.y);
     const ty = this.terrainHeight(tx, tz);
     entry.group.position.set(tx, ty, tz);
     entry.group.rotation.y = -e.yaw;
+    // Scorpion tail sway (visual only): slow side-to-side arc.
+    if (entry.tail) {
+      entry.tail.rotation.y = Math.sin(performance.now() / 700) * 0.18;
+    }
     entry.ring.visible = e.animState === 9;
     if (entry.ring.visible) {
       const pulse = 0.85 + Math.sin(performance.now() / 90) * 0.15;
@@ -1746,6 +2171,11 @@ export class WorldView {
       const k = 1 - Math.exp(-Math.max(0, dt) / 0.09);
       this.camPos.lerp(this.camPosTarget, k);
       this.camFocus.lerp(this.camFocusTarget, k);
+    }
+    // Player fill light: warm, on the camera (south) side, slightly above
+    // the hero, so the side the camera sees is lit without touching the sun.
+    if (this.playerFill) {
+      this.playerFill.position.set(px, py + 2.4, pz + 3.2);
     }
     // Camera shake: deterministic sine wobble (visual only), decaying.
     const t = performance.now() / 1000;
