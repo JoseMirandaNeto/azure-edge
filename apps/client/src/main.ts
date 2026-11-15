@@ -58,7 +58,7 @@ const charParam = params.get("char");
 const charMode: "auto" | "glb" | "capsule" =
   charParam === "capsule" ? "capsule" : charParam === "warrior" ? "glb" : "auto";
 const GLB_CHARACTER_URL = "/assets/characters/warrior_f_r64_final.glb";
-const GLB_MALE_URL = "/assets/characters/warrior_m_r64_final_rigged.glb";
+const GLB_MALE_URL = "/assets/characters/warrior_m_klein_r64_final_rigged.glb";
 // Deploy-ready: on an https:// page the browser blocks plain ws://
 // (mixed content), so default to wss:// there. `?server=` still wins,
 // then the build-time VITE_GAME_SERVER_URL (e.g. wss://…onrender.com).

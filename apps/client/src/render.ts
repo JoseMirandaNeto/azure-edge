@@ -1140,7 +1140,7 @@ function makeInstanced(
 
 // ---------------------------------------------------------------------------
 // GLB character rig (warrior_f_r64_final.glb, Rigify DEF chain, no clips;
-// warrior_m_r64_final_rigged.glb shares the same DEF bone names/axes on a
+// warrior_m_klein_r64_final_rigged.glb shares the same DEF bone names/axes on a
 // 34-bone chain transferred from the female, so the pose code below drives
 // both genders unchanged).
 // The GLB has no animations, so the pose is procedural: every frame the
@@ -1594,7 +1594,7 @@ export class WorldView {
   private glbTemplate: THREE.Group | null = null;
   private glbTriangles = 0;
   private glbLoadPromise: Promise<boolean> | null = null;
-  /** Real male mesh (warrior_m_r64_final_rigged.glb, 34-bone DEF rig
+  /** Real male mesh (warrior_m_klein_r64_final_rigged.glb, 34-bone DEF rig
    *  transferred from the female — same bone names/axes, same pose code). */
   private glbTemplateM: THREE.Group | null = null;
   private glbTrianglesM = 0;
@@ -2632,7 +2632,7 @@ export class WorldView {
   }
 
   /**
-   * Load the male GLB template (warrior_m_r64_final_rigged.glb, 34-bone
+   * Load the male GLB template (warrior_m_klein_r64_final_rigged.glb, 34-bone
    * DEF rig). Same caching/rebuild behavior as loadGlbCharacter;
    * male players fall back to the female GLB until this arrives.
    */

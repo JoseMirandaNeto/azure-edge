@@ -331,7 +331,7 @@ export const SKILL_ICONS: Record<string, string> = {
 };
 
 export const GLB_FEMALE_URL = "/assets/characters/warrior_f_r64_final.glb";
-export const GLB_MALE_URL = "/assets/characters/warrior_m_r64_final_rigged.glb";
+export const GLB_MALE_URL = "/assets/characters/warrior_m_klein_r64_final_rigged.glb";
 export const LOADING_ART_URL = "/assets/loading_serket.jpg";
 
 // ---------------------------------------------------------------------------
