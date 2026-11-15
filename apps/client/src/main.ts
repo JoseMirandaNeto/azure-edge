@@ -46,6 +46,9 @@ const paramDungeon = params.get("dungeon") ?? null;
  *  local-only models near spawn (no server entity) so Playwright can
  *  screenshot mobIds that never spawn in the current zone. */
 const paramTestMobs = params.get("testmobs") ?? null;
+/** Debug-only test-mob yaw offset (radians): `?testmobry=1.57` turns the
+ *  ?testmobs= placement sideways for side/back screenshots (PI = back). */
+const paramTestMobRy = Number(params.get("testmobry") ?? 0) || 0;
 /** Debug test mobs are placed once, on welcome (relative to the real spawn). */
 let testMobsPlaced = false;
 const cameraMode = parseCameraMode(params.get("camera"));
@@ -426,6 +429,7 @@ const client = new GameClient(serverUrl, simulatedLatencyMs, {
             id,
             me.x + (i - (ids.length - 1) / 2) * 4,
             me.y + 4 * (mobById(id)?.scale ?? 1),
+            paramTestMobRy,
           ),
         );
       }

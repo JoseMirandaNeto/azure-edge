@@ -52,6 +52,21 @@ import {
 
 export type Backend = "webgpu" | "webgl2";
 
+/**
+ * Serket boss GLB (assets/bosses/serket.glb = serket_final.glb, Pixal3D
+ * single-view seed 42, 44k tris, albedo + normal 2048² embutidos — ver
+ * assets/generated/comfyui/meshes/serket_glb/REPORT.md). A mesh tem a
+ * cabeça a ~0,95 m no arquivo (pés em y=0); a Serket procedural tem a
+ * cabeça a ~2,62 m sem escala, então o GLB é escalado para a cabeça
+ * casar com o boss procedural na escala do gamedata. Frente do GLB é +Z
+ * (como o guerreiro), por isso o inner gira PI — forward do jogo é -Z.
+ */
+const SERKET_GLB_URL = "/assets/bosses/serket.glb";
+const SERKET_GLB_HEAD_TOP_M = 0.95;
+const SERKET_PROC_HEAD_TOP_M = 2.62;
+/** Graded albedo reads dark at 8.5 m (same lift as the warrior GLB). */
+const SERKET_GLB_BRIGHTEN = 1.18;
+
 export interface RendererLike {
   domElement: HTMLCanvasElement;
   setSize(w: number, h: number): void;
@@ -1582,10 +1597,13 @@ export class WorldView {
     /** Class the GLB weapon was attached for (weapons follow the hand bone). */
     glbWeaponClass?: string;
   }>();
-  private readonly mobs = new Map<number, { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group }>();
+  private readonly mobs = new Map<
+    number,
+    { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group; mobId: string; glb?: boolean }
+  >();
   /** Debug-only visual mobs (?testmobs= in main.ts): not server entities,
    *  never in the mobs map, so snapshots can't remove them. */
-  private readonly testMobs: Array<{ group: THREE.Group; tail?: THREE.Group }> = [];
+  private readonly testMobs: Array<{ group: THREE.Group; tail?: THREE.Group; mobId: string; glb?: boolean }> = [];
   /** M2: the local player's CharForge character (LOD0). Null = capsule fallback. */
   private localCharacter: CharacterBuild | null = null;
   /** Last genome handed to setLocalGenome (gender for the GLB scale). */
@@ -1599,6 +1617,10 @@ export class WorldView {
   private glbTemplateM: THREE.Group | null = null;
   private glbTrianglesM = 0;
   private glbLoadPromiseM: Promise<boolean> | null = null;
+  /** Serket boss GLB template (serket.glb, static unrigged mesh — no DEF
+   *  bones; the idle animation is a subtle whole-body lean in updateMob). */
+  private serketGlbTemplate: THREE.Group | null = null;
+  private serketGlbPromise: Promise<boolean> | null = null;
   // --- Scenery GLBs (rodada 3) + Zero Primitivas placeholders --------------
   /** Loaded scenery GLB templates by key (temple/house/stall/palm). */
   private readonly sceneryTemplates = new Map<string, THREE.Group>();
@@ -2669,6 +2691,99 @@ export class WorldView {
   }
 
   /**
+   * Load the Serket boss GLB once (lazy — only when a serket is seen).
+   * On success every live procedural Serket (real boss + ?testmobs=) is
+   * swapped for the GLB; on failure the procedural boss stays (fallback).
+   */
+  async loadSerketGlb(): Promise<boolean> {
+    if (this.serketGlbTemplate) return true;
+    if (!this.serketGlbPromise) {
+      this.serketGlbPromise = (async (): Promise<boolean> => {
+        try {
+          const gltf = await new GLTFLoader().loadAsync(SERKET_GLB_URL);
+          gltf.scene.traverse((o) => {
+            if (o instanceof THREE.Mesh && o.material instanceof THREE.MeshStandardMaterial) {
+              o.material.color.multiplyScalar(SERKET_GLB_BRIGHTEN);
+            }
+          });
+          this.serketGlbTemplate = gltf.scene;
+          this.swapSerketMobsToGlb();
+          return true;
+        } catch (err) {
+          console.warn("Serket GLB failed to load, keeping procedural boss:", err);
+          this.serketGlbPromise = null;
+          return false;
+        }
+      })();
+    }
+    return this.serketGlbPromise;
+  }
+
+  /**
+   * One Serket GLB instance: template clone, inner rotated PI (GLB front
+   * is +Z; game forward is -Z), scaled so the head matches the procedural
+   * boss at the gamedata scale. The rings live on the UNSCALED wrapper
+   * (scaled only by the gamedata scale, like makeSerket) — a ring inside
+   * the GLB-scaled inner would span the whole arena. No tail group — the
+   * mesh is static; updateMob leans it gently instead.
+   */
+  private makeSerketGlbGroup(scale: number): { group: THREE.Group; ring: THREE.Mesh } | null {
+    if (!this.serketGlbTemplate) return null;
+    const inner = this.serketGlbTemplate.clone(true);
+    inner.rotation.y = Math.PI;
+    inner.scale.setScalar((scale * SERKET_PROC_HEAD_TOP_M) / SERKET_GLB_HEAD_TOP_M);
+    const wrapper = new THREE.Group();
+    wrapper.add(inner);
+    const ring = mobRing();
+    ring.scale.setScalar(scale);
+    // Telegraph pulse in updateMob overwrites ring.scale — keep the base
+    // so the pulse multiplies it instead of shrinking the ring to ~1 m.
+    ring.userData.baseScale = scale;
+    wrapper.add(ring);
+    const elite = eliteRing(1.6);
+    elite.scale.setScalar(scale);
+    wrapper.add(elite);
+    wrapper.userData.serketGlb = true;
+    return { group: wrapper, ring };
+  }
+
+  /** Swap every live procedural Serket for the GLB (real boss + test mobs). */
+  private swapSerketMobsToGlb(): void {
+    for (const entry of this.mobs.values()) {
+      if (entry.mobId === "serket" && !entry.glb) this.swapEntryGroupToGlb(entry);
+    }
+    for (const entry of this.testMobs) {
+      if (entry.mobId === "serket" && !entry.glb) this.swapEntryGroupToGlb(entry);
+    }
+  }
+
+  /**
+   * Replace one live procedural Serket group with the GLB instance,
+   * keeping its scene position/rotation and (for real mobs) its telegraph
+   * ring reference. Returns false when the template hasn't loaded yet.
+   */
+  private swapEntryGroupToGlb(entry: {
+    group: THREE.Group;
+    ring?: THREE.Mesh;
+    tail?: THREE.Group;
+    mobId: string;
+    glb?: boolean;
+  }): boolean {
+    const scale = MOBS.find((m) => m.id === "serket")?.scale ?? 1.8;
+    const built = this.makeSerketGlbGroup(scale);
+    if (!built) return false;
+    built.group.position.copy(entry.group.position);
+    built.group.rotation.copy(entry.group.rotation);
+    this.scene.remove(entry.group);
+    this.scene.add(built.group);
+    entry.group = built.group;
+    if (entry.ring !== undefined) entry.ring = built.ring;
+    delete entry.tail;
+    entry.glb = true;
+    return true;
+  }
+
+  /**
    * Scenery GLBs (rodada 3): temple/house/stall templates gerados no
    * ComfyUI (TRELLIS2), carregados em background como os GLBs de
    * personagem. Os placeholders procedurais ficam visíveis até o template
@@ -2943,15 +3058,23 @@ export class WorldView {
       const scale = data?.scale ?? 1;
       const built = buildMobModel(e.mobId ?? "", color, scale);
       this.scene.add(built.group);
-      const created: { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group } = {
+      const created: { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group; mobId: string; glb?: boolean } = {
         group: built.group,
         ring: built.ring,
+        mobId: e.mobId ?? "",
       };
       if (built.tail !== undefined) created.tail = built.tail;
       entry = created;
       this.mobs.set(e.id, entry);
+      // Boss GLB loads in the background; the procedural boss stays
+      // visible until it arrives (fallback, never a missing boss).
+      if (entry.mobId === "serket") void this.loadSerketGlb();
     }
     if (!entry) return; // narrowing: entry is always set above
+    // Template arrived after the procedural build (or before it): swap once.
+    if (entry.mobId === "serket" && !entry.glb && this.serketGlbTemplate) {
+      this.swapEntryGroupToGlb(entry);
+    }
     const [tx, , tz] = WORLD_TO_THREE(e.x, e.y);
     const ty = this.terrainHeight(tx, tz);
     entry.group.position.set(tx, ty, tz);
@@ -2960,10 +3083,19 @@ export class WorldView {
     if (entry.tail) {
       entry.tail.rotation.y = Math.sin(performance.now() / 700) * 0.18;
     }
+    // GLB Serket has no rig/tail: subtle whole-body lean so the boss
+    // doesn't read frozen while idle.
+    if (entry.glb) {
+      entry.group.rotation.x = 0.02 * Math.sin(performance.now() / 1200);
+    }
     entry.ring.visible = e.animState === 9;
     if (entry.ring.visible) {
       const pulse = 0.85 + Math.sin(performance.now() / 90) * 0.15;
-      entry.ring.scale.setScalar(pulse);
+      // GLB Serket rings carry their gamedata scale in userData (their
+      // wrapper is unscaled); procedural rings pulse inside the scaled
+      // group, so base 1 keeps their old behavior.
+      const base = (entry.ring.userData.baseScale as number | undefined) ?? 1;
+      entry.ring.scale.setScalar(base * pulse);
     }
   }
 
@@ -2971,19 +3103,29 @@ export class WorldView {
    * Debug-only: place a visual-only mob at world (x, y) facing the camera
    * (south), for Playwright verification of mobIds that never spawn in the
    * current zone (golem/cultista). No server entity, no gameplay effect.
+   * ryOffset (radians, debug `?testmobry=`) turns the mob for side/back
+   * screenshots — the GLB swap copies this rotation. PI = back to camera.
    */
-  addTestMob(mobId: string, x: number, y: number): void {
+  addTestMob(mobId: string, x: number, y: number, ryOffset = 0): void {
     const data = MOBS.find((m) => m.id === mobId);
     if (!data) return;
     const color = Number.parseInt(data.color.slice(1), 16);
     const built = buildMobModel(mobId, color, data.scale);
     const [tx, , tz] = WORLD_TO_THREE(x, y);
     built.group.position.set(tx, this.terrainHeight(tx, tz), tz);
-    built.group.rotation.y = Math.PI; // face south = toward the 2.5D camera
+    built.group.rotation.y = Math.PI + ryOffset; // face south = toward the 2.5D camera
     this.scene.add(built.group);
-    const entry: { group: THREE.Group; tail?: THREE.Group } = { group: built.group };
+    const entry: { group: THREE.Group; tail?: THREE.Group; mobId: string; glb?: boolean } = {
+      group: built.group,
+      mobId,
+    };
     if (built.tail !== undefined) entry.tail = built.tail;
     this.testMobs.push(entry);
+    // Serket test mob: swap to the GLB as soon as the template is ready
+    // (immediately if already loaded, otherwise when the load finishes).
+    if (mobId === "serket") {
+      if (!this.swapEntryGroupToGlb(entry)) void this.loadSerketGlb();
+    }
   }
 
   removeEntity(id: number): void {
