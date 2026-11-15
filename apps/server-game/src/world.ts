@@ -237,8 +237,19 @@ export class ZoneWorld {
     const def = cls.base.def + (armorOk?.bonus.def ?? 0);
     const mana = cls.base.mana + (armorOk?.bonus.mana ?? 0);
     // Deterministic spawn ring around the zone spawn — no Math.random.
-    const angle = (id - 1) * 2.399963; // golden angle
-    const radius = 1.5 + (id - 1) * 0.5;
+    // The slot is based on players currently present, NOT the monotonic
+    // id: nextId never resets, so the old id-based radius grew 0.5 m per
+    // join forever — the 54th join of a city instance spawned at radius
+    // 28 m, inside the temple at server (0, +30). Slots wrap every 8
+    // players (successive rings offset by 0.7 rad), so the radius never
+    // exceeds 5 m — in any zone. Open zones cap at 256 players
+    // (DEFAULT_MAX_PLAYERS), not 8, so basing the radius on the raw
+    // present-count alone would NOT fix the city; only the wrap does.
+    const n = this.players.size;
+    const slot = n % 8;
+    const ring = Math.floor(n / 8);
+    const angle = slot * 2.399963 + ring * 0.7; // golden angle, offset per ring
+    const radius = 1.5 + slot * 0.5;
     const spawn = this.zoneSpawn();
     const p: PlayerEntity = {
       id,

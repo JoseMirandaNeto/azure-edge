@@ -35,6 +35,32 @@ describe("ZoneWorld (authoritative)", () => {
     expect(snap[0].kind).toBe("player");
   });
 
+  it("spawn ring never drifts: 60 sequential joins stay near the zone spawn", () => {
+    // Regression: the old id-based ring grew 0.5 m per join forever, so
+    // the 54th join of a city instance spawned inside the temple.
+    const w = new ZoneWorld({ zoneId: "cidade_serket" });
+    const spawn = w.zoneSpawn();
+    for (let i = 0; i < 60; i += 1) {
+      const p = w.addPlayer(`P${i}`);
+      expect(Math.hypot(p.x - spawn.x, p.y - spawn.y)).toBeLessThanOrEqual(6);
+      // Temple front in server coords: x in [-5.5, 5.5], y in [27.4, 32.8].
+      expect(p.x > -5.5 && p.x < 5.5 && p.y > 27.4 && p.y < 32.8).toBe(false);
+      w.removePlayer(p.id);
+    }
+  });
+
+  it("spawn ring stays bounded with 60 simultaneous players", () => {
+    // Open zones cap at 256 players, so the ring must wrap — a radius
+    // based on the present-count alone would still reach the temple.
+    const w = new ZoneWorld({ zoneId: "cidade_serket" });
+    const spawn = w.zoneSpawn();
+    const players = [];
+    for (let i = 0; i < 60; i += 1) players.push(w.addPlayer(`P${i}`));
+    for (const p of players) {
+      expect(Math.hypot(p.x - spawn.x, p.y - spawn.y)).toBeLessThanOrEqual(6);
+    }
+  });
+
   it("applies inputs on tick and moves at walk speed", () => {
     const w = new ZoneWorld();
     const p = w.addPlayer("A");
