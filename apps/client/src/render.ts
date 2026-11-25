@@ -67,6 +67,23 @@ const SERKET_PROC_HEAD_TOP_M = 2.62;
 /** Graded albedo reads dark at 8.5 m (same lift as the warrior GLB). */
 const SERKET_GLB_BRIGHTEN = 1.18;
 
+/**
+ * Neferet boss GLB (assets/bosses/neferet.glb = neferet_final.glb, Pixal3D
+ * single-view seed 7, 54k tris, albedo + normal 2048² embutidos — ver
+ * assets/generated/comfyui/meshes/neferet_glb/REPORT.md). A mesh tem a
+ * cabeça (topo do crânio, sem a coroa) a ~0,89 m no arquivo (pés em y=0);
+ * a Neferet procedural tem a cabeça a ~2,17 m sem escala, então o GLB é
+ * escalado para a cabeça casar com o boss procedural na escala do
+ * gamedata. Frente do GLB é +Z (como a Serket), por isso o inner gira PI.
+ * Sem cetro com ankh nesta rodada (mãos vazias na referência — prop
+ * separado, como a espada do guerreiro). Sem rig: idle com lean sutil.
+ */
+const NEFERET_GLB_URL = "/assets/bosses/neferet.glb";
+const NEFERET_GLB_HEAD_TOP_M = 0.89;
+const NEFERET_PROC_HEAD_TOP_M = 2.17;
+/** Mesmo lift de brilho da Serket (albedo graded escurece a 8,5 m). */
+const NEFERET_GLB_BRIGHTEN = 1.18;
+
 export interface RendererLike {
   domElement: HTMLCanvasElement;
   setSize(w: number, h: number): void;
@@ -1621,6 +1638,11 @@ export class WorldView {
    *  bones; the idle animation is a subtle whole-body lean in updateMob). */
   private serketGlbTemplate: THREE.Group | null = null;
   private serketGlbPromise: Promise<boolean> | null = null;
+
+  /** Neferet boss GLB template (neferet.glb, static unrigged mesh — no DEF
+   *  bones; the idle animation is a subtle whole-body lean in updateMob). */
+  private neferetGlbTemplate: THREE.Group | null = null;
+  private neferetGlbPromise: Promise<boolean> | null = null;
   // --- Scenery GLBs (rodada 3) + Zero Primitivas placeholders --------------
   /** Loaded scenery GLB templates by key (temple/house/stall/palm). */
   private readonly sceneryTemplates = new Map<string, THREE.Group>();
@@ -2750,27 +2772,94 @@ export class WorldView {
   /** Swap every live procedural Serket for the GLB (real boss + test mobs). */
   private swapSerketMobsToGlb(): void {
     for (const entry of this.mobs.values()) {
-      if (entry.mobId === "serket" && !entry.glb) this.swapEntryGroupToGlb(entry);
+      if (entry.mobId === "serket" && !entry.glb) this.swapEntryGroupToGlb(entry, "serket");
     }
     for (const entry of this.testMobs) {
-      if (entry.mobId === "serket" && !entry.glb) this.swapEntryGroupToGlb(entry);
+      if (entry.mobId === "serket" && !entry.glb) this.swapEntryGroupToGlb(entry, "serket");
     }
   }
 
   /**
-   * Replace one live procedural Serket group with the GLB instance,
+   * Load the Neferet boss GLB once (lazy — only when a neferet is seen).
+   * On success every live procedural Neferet (real boss + ?testmobs=) is
+   * swapped for the GLB; on failure the procedural boss stays (fallback).
+   */
+  async loadNeferetGlb(): Promise<boolean> {
+    if (this.neferetGlbTemplate) return true;
+    if (!this.neferetGlbPromise) {
+      this.neferetGlbPromise = (async (): Promise<boolean> => {
+        try {
+          const gltf = await new GLTFLoader().loadAsync(NEFERET_GLB_URL);
+          gltf.scene.traverse((o) => {
+            if (o instanceof THREE.Mesh && o.material instanceof THREE.MeshStandardMaterial) {
+              o.material.color.multiplyScalar(NEFERET_GLB_BRIGHTEN);
+            }
+          });
+          this.neferetGlbTemplate = gltf.scene;
+          this.swapNeferetMobsToGlb();
+          return true;
+        } catch (err) {
+          console.warn("Neferet GLB failed to load, keeping procedural boss:", err);
+          this.neferetGlbPromise = null;
+          return false;
+        }
+      })();
+    }
+    return this.neferetGlbPromise;
+  }
+
+  /**
+   * One Neferet GLB instance: same layout as makeSerketGlbGroup (inner
+   * rotated PI, head-matched scale, rings on the unscaled wrapper).
+   * Elite ring 1.35 matches makeNeferet (Serket uses 1.6).
+   */
+  private makeNeferetGlbGroup(scale: number): { group: THREE.Group; ring: THREE.Mesh } | null {
+    if (!this.neferetGlbTemplate) return null;
+    const inner = this.neferetGlbTemplate.clone(true);
+    inner.rotation.y = Math.PI;
+    inner.scale.setScalar((scale * NEFERET_PROC_HEAD_TOP_M) / NEFERET_GLB_HEAD_TOP_M);
+    const wrapper = new THREE.Group();
+    wrapper.add(inner);
+    const ring = mobRing();
+    ring.scale.setScalar(scale);
+    // Telegraph pulse in updateMob overwrites ring.scale — keep the base
+    // so the pulse multiplies it instead of shrinking the ring to ~1 m.
+    ring.userData.baseScale = scale;
+    wrapper.add(ring);
+    const elite = eliteRing(1.35);
+    elite.scale.setScalar(scale);
+    wrapper.add(elite);
+    wrapper.userData.neferetGlb = true;
+    return { group: wrapper, ring };
+  }
+
+  /** Swap every live procedural Neferet for the GLB (real boss + test mobs). */
+  private swapNeferetMobsToGlb(): void {
+    for (const entry of this.mobs.values()) {
+      if (entry.mobId === "neferet" && !entry.glb) this.swapEntryGroupToGlb(entry, "neferet");
+    }
+    for (const entry of this.testMobs) {
+      if (entry.mobId === "neferet" && !entry.glb) this.swapEntryGroupToGlb(entry, "neferet");
+    }
+  }
+
+  /**
+   * Replace one live procedural boss group with the GLB instance,
    * keeping its scene position/rotation and (for real mobs) its telegraph
    * ring reference. Returns false when the template hasn't loaded yet.
    */
-  private swapEntryGroupToGlb(entry: {
-    group: THREE.Group;
-    ring?: THREE.Mesh;
-    tail?: THREE.Group;
-    mobId: string;
-    glb?: boolean;
-  }): boolean {
-    const scale = MOBS.find((m) => m.id === "serket")?.scale ?? 1.8;
-    const built = this.makeSerketGlbGroup(scale);
+  private swapEntryGroupToGlb(
+    entry: {
+      group: THREE.Group;
+      ring?: THREE.Mesh;
+      tail?: THREE.Group;
+      mobId: string;
+      glb?: boolean;
+    },
+    mobId: "serket" | "neferet",
+  ): boolean {
+    const scale = MOBS.find((m) => m.id === mobId)?.scale ?? (mobId === "serket" ? 1.8 : 1.6);
+    const built = mobId === "serket" ? this.makeSerketGlbGroup(scale) : this.makeNeferetGlbGroup(scale);
     if (!built) return false;
     built.group.position.copy(entry.group.position);
     built.group.rotation.copy(entry.group.rotation);
@@ -3069,11 +3158,15 @@ export class WorldView {
       // Boss GLB loads in the background; the procedural boss stays
       // visible until it arrives (fallback, never a missing boss).
       if (entry.mobId === "serket") void this.loadSerketGlb();
+      if (entry.mobId === "neferet") void this.loadNeferetGlb();
     }
     if (!entry) return; // narrowing: entry is always set above
     // Template arrived after the procedural build (or before it): swap once.
     if (entry.mobId === "serket" && !entry.glb && this.serketGlbTemplate) {
-      this.swapEntryGroupToGlb(entry);
+      this.swapEntryGroupToGlb(entry, "serket");
+    }
+    if (entry.mobId === "neferet" && !entry.glb && this.neferetGlbTemplate) {
+      this.swapEntryGroupToGlb(entry, "neferet");
     }
     const [tx, , tz] = WORLD_TO_THREE(e.x, e.y);
     const ty = this.terrainHeight(tx, tz);
@@ -3084,7 +3177,7 @@ export class WorldView {
       entry.tail.rotation.y = Math.sin(performance.now() / 700) * 0.18;
     }
     // GLB Serket has no rig/tail: subtle whole-body lean so the boss
-    // doesn't read frozen while idle.
+    // doesn't read frozen while idle. Same for the GLB Neferet.
     if (entry.glb) {
       entry.group.rotation.x = 0.02 * Math.sin(performance.now() / 1200);
     }
@@ -3124,7 +3217,11 @@ export class WorldView {
     // Serket test mob: swap to the GLB as soon as the template is ready
     // (immediately if already loaded, otherwise when the load finishes).
     if (mobId === "serket") {
-      if (!this.swapEntryGroupToGlb(entry)) void this.loadSerketGlb();
+      if (!this.swapEntryGroupToGlb(entry, "serket")) void this.loadSerketGlb();
+    }
+    // Neferet test mob: same lazy swap as Serket.
+    if (mobId === "neferet") {
+      if (!this.swapEntryGroupToGlb(entry, "neferet")) void this.loadNeferetGlb();
     }
   }
 
