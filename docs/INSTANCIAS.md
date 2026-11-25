@@ -94,7 +94,11 @@ pinça grossa — design aprovado na tela de carregamento, seed 20261159).
 - Instanciamento no servidor (criar/destruir zona por grupo, cap de 8,
   lockout persistido por personagem).
 - Geometria das duas dungeons (salas, corredores, armadilhas, ponte).
-- IA de boss com fases (hoje os mobs usam a IA genérica de M1).
+- IA de boss com fases: **Neferet implementada no servidor** (summon 2
+  múmias a 75%/50% HP, chuva de areia com telegraph de 1,0 s a partir de
+  50% HP, enrage +30% de velocidade de ataque abaixo de 25% HP,
+  interrompido por quebra de poise — ver `world.ts` `NeferetBossState`).
+  **Serket ainda usa a IA genérica de M1** (próxima rodada).
 - Sistema de loot/rolagem por grupo e lockout no `server-api`.
 - Balanceamento real: HP/ATQ dos bosses (4.500/9.000) são chutes para
   8 jogadores — validar em playtest com o grupo completo.

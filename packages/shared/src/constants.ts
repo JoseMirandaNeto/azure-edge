@@ -1,6 +1,7 @@
 /** Shared constants — single source of truth. Gameplay numbers live in
  *  packages/gamedata; only protocol / simulation constants live here. */
-export const PROTOCOL_VERSION = 0;
+/** Bumped to 1 for the boss snapshot fields (enraged, aoes) — see EntityState. */
+export const PROTOCOL_VERSION = 1;
 export const TICK_RATE_HZ = 20;
 export const TICK_DT_S = 1 / TICK_RATE_HZ;
 /** Logical frame used by COMBAT_SPEC.md: 1 frame = 1/60 s. */

@@ -440,6 +440,33 @@ function eliteRing(radius: number): THREE.Mesh {
 }
 
 /**
+ * Boss ground-AoE telegraph (Neferet sand rain): a red ring marking the
+ * circle plus a disc that fills as detonation approaches. Unit radius 1 —
+ * scale the group to the AoE radius; the disc scale is the fill fraction.
+ */
+function aoeDecal(): THREE.Group {
+  const g = new THREE.Group();
+  const disc = new THREE.Mesh(
+    new THREE.CircleGeometry(1, 40),
+    new THREE.MeshBasicMaterial({ color: 0xff2222, side: THREE.DoubleSide, transparent: true, opacity: 0.35, depthWrite: false }),
+  );
+  disc.rotation.x = -Math.PI / 2;
+  disc.position.y = 0.02;
+  disc.scale.setScalar(0.01);
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.94, 1, 48),
+    new THREE.MeshBasicMaterial({ color: 0xff3333, side: THREE.DoubleSide, transparent: true, opacity: 0.95, depthWrite: false }),
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.y = 0.03;
+  g.add(disc, ring);
+  g.userData.disc = disc;
+  g.userData.ring = ring;
+  g.visible = false;
+  return g;
+}
+
+/**
  * Detailed procedural giant ant (formiga gigante): three body segments,
  * mandibles, antennae, 6 legs, amber eyes. Forward is -Z.
  */
@@ -770,7 +797,7 @@ function makeCultist(color: number, scale: number): { group: THREE.Group; ring: 
  * comum, mas com coroa dourada de rubi, colar e peitoral de ouro, cetro com
  * ankh e anel de elite. Maior (gamedata scale 1.6). Forward is -Z.
  */
-function makeNeferet(color: number, scale: number): { group: THREE.Group; ring: THREE.Mesh } {
+function makeNeferet(color: number, scale: number): { group: THREE.Group; ring: THREE.Mesh; enrage: THREE.Mesh } {
   const g = new THREE.Group();
   const wrap = new THREE.MeshStandardMaterial({ color, roughness: 0.95 });
   const gold = new THREE.MeshStandardMaterial({ color: 0xd4af37, roughness: 0.3, metalness: 0.8 });
@@ -846,8 +873,14 @@ function makeNeferet(color: number, scale: number): { group: THREE.Group; ring: 
   const ring = mobRing();
   g.add(ring);
   g.add(eliteRing(1.35));
+  // Enrage ring (phase 3): same windup-ring factory, 1.8x, hidden until enraged.
+  const enrage = mobRing();
+  enrage.scale.setScalar(1.8);
+  enrage.userData.baseScale = 1.8;
+  enrage.visible = false;
+  g.add(enrage);
   g.scale.setScalar(scale);
-  return { group: g, ring };
+  return { group: g, ring, enrage };
 }
 
 /**
@@ -1044,7 +1077,7 @@ function buildMobModel(
   mobId: string,
   color: number,
   scale: number,
-): { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group } {
+): { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group; enrage?: THREE.Mesh } {
   switch (mobId) {
     case "escorpiao":
     case "escorpiao_alfa":
@@ -1616,7 +1649,7 @@ export class WorldView {
   }>();
   private readonly mobs = new Map<
     number,
-    { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group; mobId: string; glb?: boolean }
+    { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group; mobId: string; glb?: boolean; enrage?: THREE.Mesh; aoes?: THREE.Group[] }
   >();
   /** Debug-only visual mobs (?testmobs= in main.ts): not server entities,
    *  never in the mobs map, so snapshots can't remove them. */
@@ -2813,7 +2846,7 @@ export class WorldView {
    * rotated PI, head-matched scale, rings on the unscaled wrapper).
    * Elite ring 1.35 matches makeNeferet (Serket uses 1.6).
    */
-  private makeNeferetGlbGroup(scale: number): { group: THREE.Group; ring: THREE.Mesh } | null {
+  private makeNeferetGlbGroup(scale: number): { group: THREE.Group; ring: THREE.Mesh; enrage: THREE.Mesh } | null {
     if (!this.neferetGlbTemplate) return null;
     const inner = this.neferetGlbTemplate.clone(true);
     inner.rotation.y = Math.PI;
@@ -2826,11 +2859,17 @@ export class WorldView {
     // so the pulse multiplies it instead of shrinking the ring to ~1 m.
     ring.userData.baseScale = scale;
     wrapper.add(ring);
+    // Enrage ring (phase 3): same pattern, 1.8x the windup ring.
+    const enrage = mobRing();
+    enrage.scale.setScalar(scale * 1.8);
+    enrage.userData.baseScale = scale * 1.8;
+    enrage.visible = false;
+    wrapper.add(enrage);
     const elite = eliteRing(1.35);
     elite.scale.setScalar(scale);
     wrapper.add(elite);
     wrapper.userData.neferetGlb = true;
-    return { group: wrapper, ring };
+    return { group: wrapper, ring, enrage };
   }
 
   /** Swap every live procedural Neferet for the GLB (real boss + test mobs). */
@@ -2852,6 +2891,7 @@ export class WorldView {
     entry: {
       group: THREE.Group;
       ring?: THREE.Mesh;
+      enrage?: THREE.Mesh;
       tail?: THREE.Group;
       mobId: string;
       glb?: boolean;
@@ -2859,7 +2899,8 @@ export class WorldView {
     mobId: "serket" | "neferet",
   ): boolean {
     const scale = MOBS.find((m) => m.id === mobId)?.scale ?? (mobId === "serket" ? 1.8 : 1.6);
-    const built = mobId === "serket" ? this.makeSerketGlbGroup(scale) : this.makeNeferetGlbGroup(scale);
+    const built: { group: THREE.Group; ring: THREE.Mesh; enrage?: THREE.Mesh } | null =
+      mobId === "serket" ? this.makeSerketGlbGroup(scale) : this.makeNeferetGlbGroup(scale);
     if (!built) return false;
     built.group.position.copy(entry.group.position);
     built.group.rotation.copy(entry.group.rotation);
@@ -2867,6 +2908,7 @@ export class WorldView {
     this.scene.add(built.group);
     entry.group = built.group;
     if (entry.ring !== undefined) entry.ring = built.ring;
+    if (entry.enrage !== undefined && built.enrage !== undefined) entry.enrage = built.enrage;
     delete entry.tail;
     entry.glb = true;
     return true;
@@ -3139,7 +3181,7 @@ export class WorldView {
    *  Every mobId has a detailed procedural model (see buildMobModel);
    *  bosses (neferet/serket) carry a gold elite ring. Stats/scale come
    *  from gamedata — visuals only. */
-  updateMob(e: EntityState): void {
+  updateMob(e: EntityState, serverTick?: number): void {
     let entry = this.mobs.get(e.id);
     if (!entry) {
       const data = MOBS.find((m) => m.id === e.mobId) ?? MOBS[0];
@@ -3147,12 +3189,22 @@ export class WorldView {
       const scale = data?.scale ?? 1;
       const built = buildMobModel(e.mobId ?? "", color, scale);
       this.scene.add(built.group);
-      const created: { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group; mobId: string; glb?: boolean } = {
+      const created: { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group; mobId: string; glb?: boolean; enrage?: THREE.Mesh; aoes?: THREE.Group[] } = {
         group: built.group,
         ring: built.ring,
         mobId: e.mobId ?? "",
       };
       if (built.tail !== undefined) created.tail = built.tail;
+      if (built.enrage !== undefined) created.enrage = built.enrage;
+      // Boss ground-AoE telegraphs (Neferet sand rain): pool of 2, scene-level
+      // (not children of the mob group — the GLB swap must not move them).
+      const aoes: THREE.Group[] = [];
+      for (let i = 0; i < 2; i += 1) {
+        const decal = aoeDecal();
+        this.scene.add(decal);
+        aoes.push(decal);
+      }
+      created.aoes = aoes;
       entry = created;
       this.mobs.set(e.id, entry);
       // Boss GLB loads in the background; the procedural boss stays
@@ -3189,6 +3241,38 @@ export class WorldView {
       // group, so base 1 keeps their old behavior.
       const base = (entry.ring.userData.baseScale as number | undefined) ?? 1;
       entry.ring.scale.setScalar(base * pulse);
+    }
+    // Enrage ring (Neferet phase 3): red pulsing, shown while the server says enraged.
+    if (entry.enrage) {
+      entry.enrage.visible = e.enraged === true;
+      if (entry.enrage.visible) {
+        const base = (entry.enrage.userData.baseScale as number | undefined) ?? 1.8;
+        const pulse = 0.85 + Math.sin(performance.now() / 100) * 0.15;
+        entry.enrage.scale.setScalar(base * pulse);
+      }
+    }
+    // Sand-rain telegraphs: position each decal in world coords; the disc
+    // fills over the 1.0 s telegraph (untilTick is in server ticks, 20 Hz).
+    if (entry.aoes) {
+      const list = e.aoes ?? [];
+      for (let i = 0; i < entry.aoes.length; i += 1) {
+        const decal = entry.aoes[i];
+        if (!decal) continue;
+        const aoe = list[i];
+        if (!aoe) {
+          decal.visible = false;
+          continue;
+        }
+        const frac = serverTick === undefined
+          ? 0
+          : Math.min(1, Math.max(0, 1 - (aoe.untilTick - serverTick) / 20));
+        decal.visible = true;
+        const [ax, , az] = WORLD_TO_THREE(aoe.x, aoe.y);
+        decal.position.set(ax, this.terrainHeight(ax, az), az);
+        decal.scale.setScalar(aoe.radius);
+        const disc = decal.userData.disc as THREE.Mesh | undefined;
+        if (disc) disc.scale.setScalar(Math.max(0.01, frac));
+      }
     }
   }
 
@@ -3234,6 +3318,7 @@ export class WorldView {
     const m = this.mobs.get(id);
     if (m) {
       this.scene.remove(m.group);
+      for (const decal of m.aoes ?? []) this.scene.remove(decal);
       this.mobs.delete(id);
     }
     const s = this.swings.get(id);

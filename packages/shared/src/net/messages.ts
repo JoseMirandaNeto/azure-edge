@@ -78,6 +78,13 @@ export interface EntityState {
    * 6=stagger 7=knockdown 8=dead 9=windup (mob telegraph, see mobAnim in world.ts).
    */
   animState: number;
+  /** Boss enrage active (Neferet phase 3, server-authoritative). */
+  enraged?: boolean;
+  /**
+   * Ground AoE telegraphs (Neferet sand rain): circles the client draws
+   * as red rings; untilTick is the server tick of detonation (20 Hz).
+   */
+  aoes?: Array<{ x: number; y: number; radius: number; untilTick: number }>;
   hpPct: number;
   staminaPct?: number;
   manaPct?: number;

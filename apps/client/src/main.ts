@@ -677,7 +677,7 @@ function frame(now: number): void {
     for (const e of lastSnapshot.entities) {
       knownEntities.add(e.id);
       if (e.kind === "mob") {
-        view.updateMob(e);
+        view.updateMob(e, lastSnapshot.serverTick);
         continue;
       }
       const isLocal = e.id === playerId;

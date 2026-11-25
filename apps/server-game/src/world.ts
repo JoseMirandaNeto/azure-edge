@@ -114,6 +114,48 @@ export interface MobEntity {
   /** "windowKey:targetId" pairs already hit by the current swing. */
   hitDone: Set<string>;
   extraM: number;
+  /** Neferet boss fight state (only when mobId === "neferet"). */
+  boss?: NeferetBossState;
+}
+
+/** One telegraphed sand-rain circle (untilTick is the server tick of impact). */
+export interface NeferetAoe {
+  x: number;
+  y: number;
+  radius: number;
+  detonateTick: number;
+}
+
+/** Neferet boss fight state (server-side only; Neferet only, Serket later). */
+export interface NeferetBossState {
+  phase: 1 | 2 | 3;
+  /** Summon thresholds already fired (index into NEFERET_SUMMON_THRESHOLDS). */
+  summonsFired: number;
+  enraged: boolean;
+  /** Server tick until which the enrage stays broken after a poise-break interrupt. */
+  enrageBrokenUntilTick: number;
+  /** Sand-rain AoEs awaiting detonation. */
+  aoes: NeferetAoe[];
+  /** Next server tick a sand rain may be cast. */
+  nextRainTick: number;
+}
+
+export function createNeferetBossState(): NeferetBossState {
+  return {
+    phase: 1,
+    summonsFired: 0,
+    enraged: false,
+    enrageBrokenUntilTick: 0,
+    aoes: [],
+    nextRainTick: 0,
+  };
+}
+
+/** Boss phase from HP fraction (INSTANCIAS.md §1). */
+export function neferetPhaseFor(hpFrac: number): 1 | 2 | 3 {
+  if (hpFrac < NEFERET_PHASE3_HP) return 3;
+  if (hpFrac < NEFERET_PHASE2_HP) return 2;
+  return 1;
 }
 
 const SUB_STEPS_PER_TICK = 3;
@@ -126,6 +168,25 @@ const DEFAULT_MAX_PLAYERS = 256;
 /** Mob level scaling: +15% HP and +8% ATQ per level above 1. */
 const MOB_HP_PER_LEVEL = 0.15;
 const MOB_ATK_PER_LEVEL = 0.08;
+
+// --- Neferet boss fight (docs/INSTANCIAS.md §1; dungeons.json tumbas_neferet) ---
+/** HP fractions at which Neferet summons 2 mummies each (phase 1). */
+const NEFERET_SUMMON_THRESHOLDS = [0.75, 0.5];
+const NEFERET_SUMMON_COUNT = 2;
+/** Phase boundaries by HP fraction (computed on scaled HP, so they survive rebalancing). */
+const NEFERET_PHASE2_HP = 0.5;
+const NEFERET_PHASE3_HP = 0.25;
+/** Enrage (phase 3): attack-speed multiplier (+30%). Frame-quantized, the
+ *  realized cycle is 71 frames vs 90 baseline (~1.27x rate) — see mobAttackSpeed. */
+const NEFERET_ENRAGE_MULT = 1.3;
+/** Sand rain (phase 2+): 1.0 s telegraph, then damage in the circle. */
+const NEFERET_RAIN_TELEGRAPH_TICKS = 20; // 1.0 s at 20 Hz
+const NEFERET_RAIN_INTERVAL_TICKS = 160; // 8 s between casts (implementation choice)
+const NEFERET_RAIN_RADIUS_M = 3.0; // same as her arc attack radius
+const NEFERET_RAIN_DAMAGE_MULT = 1.0;
+const NEFERET_RAIN_POISE = 10;
+/** Breather after a poise break interrupts the enrage (implementation choice). */
+const NEFERET_ENRAGE_BREAK_TICKS = 200; // 10 s
 /** Fallback class (gamedata guarantees >= 1 class; fail loud otherwise). */
 function firstClass(): ClassData {
   const c = CLASSES[0];
@@ -331,6 +392,8 @@ export class ZoneWorld {
       hitDone: new Set(),
       extraM: 0,
     };
+    // Neferet spawns with her 3-phase fight attached (any spawn path).
+    if (mobId === "neferet") m.boss = createNeferetBossState();
     this.mobs.set(id, m);
     return m;
   }
@@ -696,7 +759,10 @@ export class ZoneWorld {
     this.emit({ kind: "hit", sourceId: source.id, targetId: t.id, amount: dmg, crit, finisher, x: t.x, y: t.y });
     if (effect === "knockback") this.pushBack(t, source.yaw, 0.6);
     const superArmor = t.kind === "player" && this.targetSuperArmor(t);
-    if (applyPoise(c, finalPoise, this.frame, superArmor) === "stagger") this.staggerTarget(t);
+    if (applyPoise(c, finalPoise, this.frame, superArmor) === "stagger") {
+      this.staggerTarget(t);
+      this.onPoiseBreakStagger(t);
+    }
     if (finisher && c.state !== "dead") this.knockdownTarget(t);
     if (effect === "knockdown" && c.state !== "dead") this.knockdownTarget(t);
     if (c.hp <= 0) this.killTarget(t, source.id, crit);
@@ -742,6 +808,132 @@ export class ZoneWorld {
     } else {
       t.respawnFrame = this.frame + Math.round(t.data.respawnS * 60);
       t.aiState = "dead";
+      // A dead boss's telegraphed rains never detonate.
+      if (t.boss) t.boss.aoes = [];
+    }
+  }
+
+  /**
+   * A poise break on an enraged Neferet interrupts the enrage
+   * (INSTANCIAS.md §1: "quebre a postura para interromper"). The boss
+   * re-enrages 10 s later if still below 25% HP (see updateNeferetBoss).
+   * Parry staggers go through staggerAttacker, not here, so they don't
+   * interrupt the enrage — only a real poise break does.
+   */
+  private onPoiseBreakStagger(t: PlayerEntity | MobEntity): void {
+    if (t.kind !== "mob" || !t.boss || !t.boss.enraged) return;
+    t.boss.enraged = false;
+    t.boss.enrageBrokenUntilTick = this.tick + NEFERET_ENRAGE_BREAK_TICKS;
+  }
+
+  // --- Neferet boss fight (INSTANCIAS.md §1) ---
+
+  /** Attack-speed multiplier: enraged Neferet swings 30% faster (phase 3). */
+  private mobAttackSpeed(m: MobEntity): number {
+    return m.boss?.enraged ? NEFERET_ENRAGE_MULT : 1;
+  }
+
+  /**
+   * Neferet's 3-phase fight, driven by HP fraction (INSTANCIAS.md §1):
+   * phase 1 summons 2 mummies per 25% HP lost; phase 2 (<50%) adds the
+   * sand rain (1.0 s telegraph, then AoE damage); phase 3 (<25%) enrages
+   * (+30% attack speed) until a poise break interrupts it for 10 s.
+   * Phases are cumulative: the rain keeps casting in phase 3.
+   * Runs every sub-step (before the stagger pause) so phase changes,
+   * summons and detonations are never skipped between ticks.
+   */
+  private updateNeferetBoss(m: MobEntity): void {
+    const b = m.boss;
+    if (!b) return;
+    const c = m.combat;
+    // Full HP again (leash reset): a fresh fight.
+    if (c.hp >= c.maxHp && (b.phase !== 1 || b.summonsFired > 0 || b.enraged || b.aoes.length > 0)) {
+      m.boss = createNeferetBossState();
+      return;
+    }
+    const hpFrac = c.hp / c.maxHp;
+    const phase = neferetPhaseFor(hpFrac);
+    if (phase !== b.phase) {
+      b.phase = phase;
+      if (phase === 2) b.nextRainTick = Math.min(b.nextRainTick, this.tick); // rain starts at once
+      if (phase === 3 && this.tick >= b.enrageBrokenUntilTick) b.enraged = true;
+    }
+    // Summon volleys: 2 mummies at 75% and at 50% HP (one volley per threshold).
+    while (b.summonsFired < NEFERET_SUMMON_THRESHOLDS.length) {
+      const threshold = NEFERET_SUMMON_THRESHOLDS[b.summonsFired];
+      if (threshold === undefined || hpFrac > threshold) break;
+      b.summonsFired += 1;
+      this.neferetSummon(m);
+    }
+    // Enrage re-applies after the poise-break breather ends.
+    if (b.phase === 3 && !b.enraged && this.tick >= b.enrageBrokenUntilTick) b.enraged = true;
+    // Sand rain: one telegraphed circle at a time, while phase >= 2.
+    if (b.phase >= 2 && this.tick >= b.nextRainTick && b.aoes.length === 0) {
+      this.neferetCastRain(m);
+    }
+    // Detonate rains whose telegraph ran out.
+    for (let i = b.aoes.length - 1; i >= 0; i -= 1) {
+      const aoe = b.aoes[i];
+      if (!aoe) continue;
+      if (this.tick >= aoe.detonateTick) {
+        b.aoes.splice(i, 1);
+        this.neferetDetonateRain(m, aoe);
+      }
+    }
+  }
+
+  /** Summon NEFERET_SUMMON_COUNT mummies around the boss (phase 1 thresholds). */
+  private neferetSummon(m: MobEntity): void {
+    const half = this.zoneSizeM() / 2 - 2;
+    for (let i = 0; i < NEFERET_SUMMON_COUNT; i += 1) {
+      const angle = this.rng() * Math.PI * 2;
+      const radius = 2 + this.rng() * 1.5;
+      const summoned = this.spawnMob(
+        "mumia",
+        Math.max(-half, Math.min(half, m.x + Math.cos(angle) * radius)),
+        Math.max(-half, Math.min(half, m.y + Math.sin(angle) * radius)),
+        m.level, // summons fight at the boss's level
+      );
+      // Join the fight at once instead of waiting for a patrol aggro check.
+      if (summoned) summoned.targetId = m.targetId;
+    }
+  }
+
+  /** Sand rain (phase 2+): one telegraphed circle on the boss's target. */
+  private neferetCastRain(m: MobEntity): void {
+    const b = m.boss;
+    if (!b) return;
+    let target = m.targetId !== null ? this.players.get(m.targetId) : undefined;
+    if (!target) {
+      const id = this.nearestPlayer(m.x, m.y, 30);
+      target = id !== null ? this.players.get(id) : undefined;
+    }
+    if (!target || target.combat.state === "dead") {
+      // Nobody to hit: try again after the interval instead of stalling.
+      b.nextRainTick = this.tick + NEFERET_RAIN_INTERVAL_TICKS;
+      return;
+    }
+    const angle = this.rng() * Math.PI * 2;
+    const offset = this.rng() * 1.5;
+    b.aoes.push({
+      x: target.x + Math.cos(angle) * offset,
+      y: target.y + Math.sin(angle) * offset,
+      radius: NEFERET_RAIN_RADIUS_M,
+      detonateTick: this.tick + NEFERET_RAIN_TELEGRAPH_TICKS,
+    });
+    b.nextRainTick = this.tick + NEFERET_RAIN_TELEGRAPH_TICKS + NEFERET_RAIN_INTERVAL_TICKS;
+  }
+
+  /** Sand rain impact: players still inside the circle take the boss's attack. */
+  private neferetDetonateRain(m: MobEntity, aoe: NeferetAoe): void {
+    for (const p of this.players.values()) {
+      if (p.combat.state === "dead") continue;
+      if (Math.hypot(p.x - aoe.x, p.y - aoe.y) > aoe.radius) continue;
+      // Reuses the shared damage path (dodge i-frames, guard, poise, events).
+      this.applyHit(
+        { id: m.id, x: m.x, y: m.y, yaw: m.yaw, atk: m.atk },
+        NEFERET_RAIN_DAMAGE_MULT, NEFERET_RAIN_POISE, false, undefined, p,
+      );
     }
   }
 
@@ -1003,9 +1195,14 @@ export class ZoneWorld {
         m.aiState = "patrol";
         m.targetId = null;
         m.taunt = null;
+        if (m.boss) m.boss = createNeferetBossState(); // respawn restarts the fight
       }
       return;
     }
+    // Boss fight first: phase changes, summons and rain detonations run even
+    // while the boss is staggered (only death pauses the fight).
+    if (m.boss) this.updateNeferetBoss(m);
+    const speed = this.mobAttackSpeed(m);
     c.stateFrame += 1;
     c.poise = Math.min(c.poiseMax, c.poise + (d.poiseRegenPerS / 60));
     if (this.frame - c.lastHitFrame > 120) c.comboHits = 0;
@@ -1076,7 +1273,8 @@ export class ZoneWorld {
           m.aiState = "chase";
           break;
         }
-        if (c.stateFrame >= d.attack.windup) {
+        // Enraged Neferet telegraphs faster (windup scaled by attack speed).
+        if (c.stateFrame >= Math.max(1, Math.round(d.attack.windup / speed))) {
           m.aiState = "attack";
           c.stateFrame = 0;
           m.hitDone = new Set();
@@ -1091,14 +1289,14 @@ export class ZoneWorld {
             d.attack.mult, d.attack.poise, false, undefined, false,
           );
         }
-        if (c.stateFrame >= d.attack.active + d.attack.recovery) {
+        if (c.stateFrame >= d.attack.active + Math.max(1, Math.round(d.attack.recovery / speed))) {
           m.aiState = "recover";
           c.stateFrame = 0;
         }
         break;
       }
       case "recover": {
-        if (c.stateFrame >= 12) {
+        if (c.stateFrame >= Math.max(1, Math.round(12 / speed))) {
           m.aiState = target ? "chase" : "patrol";
           c.stateFrame = 0;
         }
@@ -1159,6 +1357,13 @@ export class ZoneWorld {
         yaw: m.yaw,
         animState: mobAnim(m),
         hpPct: Math.round((m.combat.hp / m.combat.maxHp) * 100),
+        // Boss fight state (Neferet only): enrage flag + sand-rain telegraphs.
+        ...(m.boss?.enraged ? { enraged: true } : {}),
+        ...(m.boss && m.boss.aoes.length > 0
+          ? {
+              aoes: m.boss.aoes.map((a) => ({ x: a.x, y: a.y, radius: a.radius, untilTick: a.detonateTick })),
+            }
+          : {}),
       }));
     return [...players, ...mobs];
   }

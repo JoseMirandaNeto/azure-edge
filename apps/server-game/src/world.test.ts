@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ZoneWorld } from "../src/world.js";
+import { ZoneWorld, type MobEntity, type PlayerEntity } from "../src/world.js";
 
 function forwardInput(seq: number) {
   return { seq, tick: seq, moveX: 0, moveY: 1, yaw: 0, buttons: 0, skillId: 0 };
@@ -355,6 +355,202 @@ describe("ZoneWorld (authoritative)", () => {
       `tick 30 mobs: avg ${w.tickMsAvg.toFixed(3)} ms, p99 ${w.tickMsP99().toFixed(3)} ms, max ${w.tickMsMax.toFixed(3)} ms`,
     );
     expect(w.tickMsP99()).toBeLessThan(10);
+  });
+});
+
+describe("Neferet boss (3-phase fight, INSTANCIAS.md §1)", () => {
+  /** Tumbas world with the boss spawned and a player in aggro range. */
+  function neferetWorld() {
+    const w = new ZoneWorld({ zoneId: "tumbas", maxPlayers: 8 });
+    const spawned = w.spawnDungeonMobs("tumbas");
+    const found = spawned.find((m) => m.mobId === "neferet");
+    if (!found) throw new Error("neferet did not spawn");
+    const boss = found;
+    expect(boss.combat.maxHp).toBe(35775); // 4500 * (1 + 0.15 * 11) * 3
+    const p = w.addPlayer("A");
+    p.x = 0;
+    p.y = -18; // 2 m from the boss anchor (0, -20)
+    return { w, boss, p };
+  }
+
+  function countMummies(w: ZoneWorld): number {
+    return [...w.mobs.values()].filter((m) => m.mobId === "mumia").length;
+  }
+
+  /** Keep the tester alive + standing while the boss fights back. */
+  function keepAlive(w: ZoneWorld, p: PlayerEntity): void {
+    p.combat.hp = p.combat.maxHp;
+    if (p.combat.state === "dead") {
+      p.combat.state = "idle";
+      p.combat.stateFrame = 0;
+    }
+  }
+
+  /**
+   * Full attack cycle in ticks: windup -> attack -> recover -> chase.
+   * Baseline: 40+38+12 = 90 frames = 30 ticks. Enraged (+30% attack
+   * speed, frame-quantized): 31+31+9 = 71 frames = 24 ticks.
+   * The chase->windup hop happens inside the same tick, so "chase" is
+   * never observed directly — the cycle end is the boss leaving recover.
+   */
+  function measureAttackCycle(w: ZoneWorld, boss: MobEntity, p: PlayerEntity): number {
+    boss.x = 0;
+    boss.y = -20;
+    p.x = 0;
+    p.y = -18;
+    p.def = 10000; // unkillable tester: a crit must not clear the boss's target mid-cycle
+    boss.targetId = p.id;
+    boss.aiState = "windup";
+    boss.combat.state = "idle";
+    boss.combat.stateFrame = 0;
+    let ticks = 0;
+    let sawRecover = false;
+    for (let i = 0; i < 60; i += 1) {
+      keepAlive(w, p);
+      if (boss.aiState === "recover") sawRecover = true;
+      w.step();
+      ticks += 1;
+      if (sawRecover && boss.aiState !== "recover") break;
+    }
+    if (!sawRecover || boss.aiState === "recover") throw new Error("attack cycle did not complete");
+    return ticks;
+  }
+
+  it("spawns with the fight attached: phase 1, no summons, no rain, not enraged", () => {
+    const { boss } = neferetWorld();
+    expect(boss.boss?.phase).toBe(1);
+    expect(boss.boss?.summonsFired).toBe(0);
+    expect(boss.boss?.enraged).toBe(false);
+    expect(boss.boss?.aoes).toHaveLength(0);
+  });
+
+  it("phase 1: crossing 75% HP summons 2 mummies", () => {
+    const { w, boss } = neferetWorld();
+    const before = countMummies(w);
+    boss.combat.hp = Math.floor(boss.combat.maxHp * 0.74);
+    for (let i = 0; i < 3; i += 1) w.step();
+    expect(countMummies(w) - before).toBe(2);
+    expect(boss.boss?.phase).toBe(1);
+    expect(boss.boss?.summonsFired).toBe(1);
+  });
+
+  it("crossing 50% HP summons 2 more mummies, enters phase 2 and telegraphs the first sand rain", () => {
+    const { w, boss } = neferetWorld();
+    const before = countMummies(w);
+    boss.combat.hp = Math.floor(boss.combat.maxHp * 0.49);
+    for (let i = 0; i < 3; i += 1) w.step();
+    expect(countMummies(w) - before).toBe(4); // 75% + 50% volleys
+    expect(boss.boss?.phase).toBe(2);
+    expect(boss.boss?.summonsFired).toBe(2);
+    expect(boss.boss?.aoes).toHaveLength(1);
+    const aoe = boss.boss?.aoes[0];
+    expect(aoe?.radius).toBe(3);
+    expect(aoe?.detonateTick).toBeGreaterThan(w.tick);
+    expect(aoe?.detonateTick).toBeLessThanOrEqual(w.tick + 20);
+    // The snapshot carries the telegraph for the client decal.
+    const snap = w.snapshot().find((e) => e.id === boss.id);
+    expect(snap?.aoes).toHaveLength(1);
+    expect(snap?.aoes?.[0]?.untilTick).toBe(aoe?.detonateTick);
+    expect(snap?.enraged).toBeUndefined();
+  });
+
+  it("sand rain detonates after 1.0 s: players inside the circle take damage, outside do not", () => {
+    const { w, boss, p } = neferetWorld();
+    const q = w.addPlayer("B");
+    // Stagger the boss so her normal attacks can't confound the rain damage.
+    boss.combat.state = "stagger";
+    boss.aiState = "stagger";
+    boss.combat.stateFrame = 0;
+    boss.combat.hp = Math.floor(boss.combat.maxHp * 0.49);
+    w.step(); // phase 2 + first rain cast
+    const aoe = boss.boss?.aoes[0];
+    if (!aoe) throw new Error("no rain telegraphed");
+    // Remove every other mob: their hits would confound the reading.
+    for (const m of [...w.mobs.values()]) {
+      if (m.id !== boss.id) w.mobs.delete(m.id);
+    }
+    p.x = aoe.x;
+    p.y = aoe.y; // inside the circle
+    q.x = aoe.x + 20;
+    q.y = aoe.y; // far outside
+    const hpBefore = p.combat.hp;
+    const detonateTick = aoe.detonateTick;
+    // Step until just before detonation: no damage yet (stagger ends at 72 frames).
+    while (w.tick < detonateTick - 1) w.step();
+    expect(p.combat.hp).toBe(hpBefore);
+    // Step past detonation: the rain lands.
+    for (let i = 0; i < 3; i += 1) w.step();
+    expect(p.combat.hp).toBeLessThan(hpBefore);
+    expect(q.combat.hp).toBe(q.combat.maxHp);
+    expect(w.drainEvents().some((e) => e.kind === "hit" && e.sourceId === boss.id && e.targetId === p.id)).toBe(true);
+  });
+
+  it("phase 3: enrage speeds the attack cycle (90 -> 71 frames: 30 -> 24 ticks)", () => {
+    const { w, boss, p } = neferetWorld();
+    expect(measureAttackCycle(w, boss, p)).toBe(30);
+    boss.combat.hp = Math.floor(boss.combat.maxHp * 0.24);
+    for (let i = 0; i < 3; i += 1) w.step();
+    expect(boss.boss?.phase).toBe(3);
+    expect(boss.boss?.enraged).toBe(true);
+    expect(w.snapshot().find((e) => e.id === boss.id)?.enraged).toBe(true);
+    expect(measureAttackCycle(w, boss, p)).toBe(24);
+  });
+
+  it("poise break while enraged interrupts the enrage; it re-applies after 10 s", () => {
+    const { w, boss, p } = neferetWorld();
+    boss.combat.hp = Math.floor(boss.combat.maxHp * 0.24);
+    for (let i = 0; i < 3; i += 1) w.step();
+    expect(boss.boss?.phase).toBe(3);
+    expect(boss.boss?.enraged).toBe(true);
+    // One chain hit (8 poise) breaks her lowered poise.
+    boss.combat.poise = 5;
+    p.def = 10000; // unkillable tester: the boss must keep her target
+    p.x = 0;
+    p.y = -18;
+    p.yaw = Math.PI; // face the boss (boss is at -20, player at -18)
+    let seq = 1;
+    for (let i = 0; i < 120 && boss.boss?.enraged; i += 1) {
+      keepAlive(w, p);
+      if (p.combat.state === "idle" || p.combat.state === "move") {
+        w.applyInput(p.id, input(seq, 1, 0, p.yaw));
+        seq += 1;
+      }
+      w.step();
+    }
+    expect(boss.boss?.enraged).toBe(false);
+    expect(boss.combat.state).toBe("stagger");
+    expect(boss.boss?.enrageBrokenUntilTick).toBeGreaterThan(w.tick);
+    // 10 s later the enrage comes back while still below 25% HP.
+    for (let i = 0; i < 210; i += 1) {
+      keepAlive(w, p);
+      w.step();
+    }
+    expect(boss.boss?.enraged).toBe(true);
+  });
+
+  it("snapshot carries the enrage flag; a leash reset restores phase 1", () => {
+    const { w, boss } = neferetWorld();
+    boss.combat.hp = Math.floor(boss.combat.maxHp * 0.24);
+    for (let i = 0; i < 3; i += 1) w.step();
+    const snap = w.snapshot().find((e) => e.id === boss.id);
+    expect(snap?.enraged).toBe(true);
+    expect(snap?.aoes?.length).toBeGreaterThanOrEqual(1);
+    // Full HP again (leash reset): the fight restarts clean.
+    boss.combat.hp = boss.combat.maxHp;
+    w.step();
+    expect(boss.boss?.phase).toBe(1);
+    expect(boss.boss?.summonsFired).toBe(0);
+    expect(boss.boss?.enraged).toBe(false);
+    expect(boss.boss?.aoes).toHaveLength(0);
+    const snap2 = w.snapshot().find((e) => e.id === boss.id);
+    expect(snap2?.enraged).toBeUndefined();
+    expect(snap2?.aoes).toBeUndefined();
+  });
+
+  it("Serket has no Neferet fight state (later round)", () => {
+    const templo = new ZoneWorld({ zoneId: "templo", maxPlayers: 8 });
+    const serket = templo.spawnDungeonMobs("templo").find((m) => m.mobId === "serket");
+    expect(serket?.boss).toBeUndefined();
   });
 });
 
