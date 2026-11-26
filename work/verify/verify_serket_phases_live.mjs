@@ -85,8 +85,12 @@ await page.evaluate(() => {
   };
 });
 
-async function capShot(cdp, name) {
-  await sleep(1200);
+async function capShot(cdp, name, delayMs = 1200) {
+  // delayMs must stay under the telegraph being captured: the sting
+  // sector only lives 1.0 s (20 ticks), so a 1200 ms sleep screenshots
+  // after it already expired — that is why serket_live_p1_sting showed
+  // no sector even though sectorVisible=true at detection. Pass 0 there.
+  await sleep(delayMs);
   let data = null;
   for (let a = 0; a < 3 && !data; a += 1) {
     try { ({ data } = await cdp.send("Page.captureScreenshot", { format: "png" })); }
@@ -186,7 +190,7 @@ while (Date.now() - t0 < 720000) {
   if (!seen.sting && st.stingUntilTick > 0) {
     seen.sting = true;
     console.log(`STING live: hp ${st.hpPct}% server stingUntilTick=${st.stingUntilTick} sectorVisible=${st.stingVisible}`);
-    await capShot(cdp, "serket_live_p1_sting");
+    await capShot(cdp, "serket_live_p1_sting", 0);
   }
   if (!seen.p2 && st.hpPct <= 66) {
     // Wait a tick for the client to show the ring, then capture fast:
