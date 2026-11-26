@@ -98,7 +98,11 @@ pinça grossa — design aprovado na tela de carregamento, seed 20261159).
   múmias a 75%/50% HP, chuva de areia com telegraph de 1,0 s a partir de
   50% HP, enrage +30% de velocidade de ataque abaixo de 25% HP,
   interrompido por quebra de poise — ver `world.ts` `NeferetBossState`).
-  **Serket ainda usa a IA genérica de M1** (próxima rodada).
+  **Serket implementada no servidor** (ferrão em arco de 270° com telegraph
+  de 1,0 s na fase 1; invoca 2 Escorpiões Alfa com super-armor de 5 s ao
+  entrar na fase 2; poças de veneno com DoT a partir de 33% HP e enrage
+  de +50% de dano aos 5 min de luta, sem interrupção por quebra de poise —
+  ver `world.ts` `SerketBossState`; protocolo v2).
 - Sistema de loot/rolagem por grupo e lockout no `server-api`.
 - Balanceamento real: HP/ATQ dos bosses (4.500/9.000) são chutes para
   8 jogadores — validar em playtest com o grupo completo.

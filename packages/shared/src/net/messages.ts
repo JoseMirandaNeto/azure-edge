@@ -78,13 +78,22 @@ export interface EntityState {
    * 6=stagger 7=knockdown 8=dead 9=windup (mob telegraph, see mobAnim in world.ts).
    */
   animState: number;
-  /** Boss enrage active (Neferet phase 3, server-authoritative). */
+  /** Boss enrage active (Neferet phase 3, Serket 5-min enrage — server-authoritative). */
   enraged?: boolean;
+  /** Super-armor active (Serket phase 2 summon channel — she cannot be staggered). */
+  superArmor?: boolean;
   /**
-   * Ground AoE telegraphs (Neferet sand rain): circles the client draws
-   * as red rings; untilTick is the server tick of detonation (20 Hz).
+   * Tail-sting telegraph (Serket phase 1): server tick of the 270° impact.
+   * The client draws the sector while serverTick < stingUntilTick.
    */
-  aoes?: Array<{ x: number; y: number; radius: number; untilTick: number }>;
+  stingUntilTick?: number;
+  /**
+   * Ground AoE telegraphs (Neferet sand rain, Serket poison pools):
+   * circles the client draws as rings; untilTick is the server tick of
+   * detonation (20 Hz). kind "poison" pools are green and keep dealing
+   * damage per second after detonation; red (default) is a one-shot hit.
+   */
+  aoes?: Array<{ x: number; y: number; radius: number; untilTick: number; kind?: "poison" }>;
   hpPct: number;
   staminaPct?: number;
   manaPct?: number;

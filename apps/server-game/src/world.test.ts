@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ZoneWorld, testPlayerAtkMultiplier, testPlayerHpMultiplier, type MobEntity, type PlayerEntity } from "../src/world.js";
+import { ZoneWorld, testPlayerAtkMultiplier, testPlayerHpMultiplier, testSerketEnrageTicks, type MobEntity, type PlayerEntity } from "../src/world.js";
 
 function forwardInput(seq: number) {
   return { seq, tick: seq, moveX: 0, moveY: 1, yaw: 0, buttons: 0, skillId: 0 };
@@ -547,10 +547,13 @@ describe("Neferet boss (3-phase fight, INSTANCIAS.md §1)", () => {
     expect(snap2?.aoes).toBeUndefined();
   });
 
-  it("Serket has no Neferet fight state (later round)", () => {
+  it("Serket has no Neferet fight state, but her own Serket fight state", () => {
     const templo = new ZoneWorld({ zoneId: "templo", maxPlayers: 8 });
     const serket = templo.spawnDungeonMobs("templo").find((m) => m.mobId === "serket");
     expect(serket?.boss).toBeUndefined();
+    expect(serket?.serketBoss?.phase).toBe(1);
+    expect(serket?.serketBoss?.summonsFired).toBe(0);
+    expect(serket?.serketBoss?.enraged).toBe(false);
   });
 
   it("playtest hooks: AZURE_EDGE_TEST_ATK_MULT / HP_MULT scale the player, off by default", () => {
@@ -587,6 +590,383 @@ describe("Neferet boss (3-phase fight, INSTANCIAS.md §1)", () => {
     } finally {
       delete process.env.AZURE_EDGE_TEST_ATK_MULT;
       delete process.env.AZURE_EDGE_TEST_HP_MULT;
+    }
+  });
+});
+
+describe("Serket boss (3-phase fight, INSTANCIAS.md §2)", () => {
+  /** Templo world with the boss spawned and a player in aggro range. */
+  function serketWorld() {
+    const w = new ZoneWorld({ zoneId: "templo", maxPlayers: 8 });
+    const spawned = w.spawnDungeonMobs("templo");
+    const found = spawned.find((m) => m.mobId === "serket");
+    if (!found) throw new Error("serket did not spawn");
+    const boss = found;
+    expect(boss.combat.maxHp).toBe(138600); // 9000 * (1 + 0.15 * 19) * 4
+    expect(boss.atk).toBe(136); // 30 * (1 + 0.08 * 19) * 1.8
+    // Drop the dungeon trash: their hits would confound the readings.
+    for (const m of [...w.mobs.values()]) {
+      if (m.id !== boss.id) w.mobs.delete(m.id);
+    }
+    const p = w.addPlayer("A");
+    p.x = 0;
+    p.y = -18; // 2 m from the boss anchor (0, -20)
+    return { w, boss, p };
+  }
+
+  function countAlfas(w: ZoneWorld): number {
+    return [...w.mobs.values()].filter((m) => m.mobId === "escorpiao_alfa").length;
+  }
+
+  /** Keep the tester alive + standing while the boss fights back. */
+  function keepAlive(w: ZoneWorld, p: PlayerEntity): void {
+    p.combat.hp = p.combat.maxHp;
+    if (p.combat.state === "dead") {
+      p.combat.state = "idle";
+      p.combat.stateFrame = 0;
+    }
+  }
+
+  /** Hold the boss staggered so her normal attacks can't confound a reading.
+   *  Re-apply before every step: a stagger only lasts STAGGER_FRAMES. */
+  function holdStagger(boss: MobEntity): void {
+    boss.combat.state = "stagger";
+    boss.aiState = "stagger";
+    boss.combat.stateFrame = 0;
+  }
+
+  it("spawns with the fight attached: phase 1, no summons, no pools, not enraged", () => {
+    const { boss } = serketWorld();
+    expect(boss.serketBoss?.phase).toBe(1);
+    expect(boss.serketBoss?.summonsFired).toBe(0);
+    expect(boss.serketBoss?.superArmorUntilTick).toBe(0);
+    expect(boss.serketBoss?.fightStartTick).toBe(0);
+    expect(boss.serketBoss?.enraged).toBe(false);
+    expect(boss.serketBoss?.stingUntilTick).toBe(0);
+    expect(boss.serketBoss?.stingArmed).toBe(false);
+    expect(boss.serketBoss?.pools).toHaveLength(0);
+  });
+
+  it("phase 1: entering windup arms a tail sting (60-frame telegraph, 270° arc, safe wedge behind)", () => {
+    const { w, boss, p } = serketWorld();
+    const q = w.addPlayer("B");
+    // Unkillable testers: the sting must not clear the boss's target mid-test.
+    p.def = 10000;
+    q.def = 10000;
+    boss.x = 0;
+    boss.y = -20;
+    p.x = 0;
+    p.y = -18; // 2 m in front of the boss (she faces +y toward p)
+    q.x = 0;
+    q.y = -22; // 2 m directly behind her (the 90° safe wedge)
+    boss.targetId = p.id;
+    boss.aiState = "chase";
+    boss.combat.state = "idle";
+    boss.combat.stateFrame = 0;
+    w.step(); // chase -> windup, sting arms (first windup: off cooldown)
+    expect(boss.serketBoss?.stingArmed).toBe(true);
+    const stingUntil = boss.serketBoss?.stingUntilTick ?? 0;
+    expect(stingUntil).toBeGreaterThan(w.tick);
+    expect(stingUntil).toBeLessThanOrEqual(w.tick + 20);
+    // The snapshot carries the telegraph for the sector decal.
+    expect(w.snapshot().find((e) => e.id === boss.id)?.stingUntilTick).toBe(stingUntil);
+    // A normal windup is 36 frames (12 ticks); the sting windup is 60 frames.
+    for (let i = 0; i < 13; i += 1) w.step();
+    expect(boss.aiState).toBe("windup"); // still telegraphing the sting
+    // Step through the sting: the player in front takes the hit, the one
+    // behind her (safe wedge) does not.
+    const hpP = p.combat.hp;
+    const hpQ = q.combat.hp;
+    for (let i = 0; i < 30 && boss.aiState !== "recover"; i += 1) w.step();
+    expect(boss.aiState).toBe("recover");
+    expect(p.combat.hp).toBeLessThan(hpP);
+    expect(q.combat.hp).toBe(hpQ);
+    // The sting is back on cooldown and the telegraph is gone.
+    expect(boss.serketBoss?.stingArmed).toBe(false);
+    expect(boss.serketBoss?.stingUntilTick).toBe(0);
+    expect(boss.serketBoss?.nextStingTick).toBeGreaterThan(w.tick);
+    expect(w.snapshot().find((e) => e.id === boss.id)?.stingUntilTick).toBeUndefined();
+  });
+
+  it("a tail sting disarms if the target leaves range mid-windup", () => {
+    const { w, boss, p } = serketWorld();
+    p.def = 10000;
+    boss.targetId = p.id;
+    boss.aiState = "chase";
+    boss.combat.state = "idle";
+    boss.combat.stateFrame = 0;
+    w.step(); // chase -> windup, sting arms
+    expect(boss.serketBoss?.stingArmed).toBe(true);
+    // The target runs away mid-telegraph (beyond 2.5x attack range).
+    p.x = 0;
+    p.y = -10; // 10 m from the boss (attack range 2.6 m)
+    for (let i = 0; i < 5; i += 1) w.step();
+    expect(boss.serketBoss?.stingArmed).toBe(false);
+    expect(boss.serketBoss?.stingUntilTick).toBe(0);
+    expect(w.snapshot().find((e) => e.id === boss.id)?.stingUntilTick).toBeUndefined();
+  });
+
+  it("phase 2: crossing 66% HP summons 2 Escorpiões Alfa and grants super-armor", () => {
+    const { w, boss, p } = serketWorld();
+    p.def = 10000; // unkillable tester
+    boss.targetId = p.id;
+    boss.combat.hp = Math.floor(boss.combat.maxHp * 0.65);
+    for (let i = 0; i < 3; i += 1) {
+      keepAlive(w, p);
+      w.step();
+    }
+    expect(boss.serketBoss?.phase).toBe(2);
+    expect(boss.serketBoss?.summonsFired).toBe(1);
+    expect(countAlfas(w)).toBe(2);
+    // The summoned alfas join the fight at once.
+    const alfas = [...w.mobs.values()].filter((m) => m.mobId === "escorpiao_alfa");
+    expect(alfas.every((m) => m.targetId === p.id)).toBe(true);
+    // Super-armor: the snapshot carries it for the client ring.
+    expect(boss.serketBoss?.superArmorUntilTick).toBeGreaterThan(w.tick);
+    expect(w.snapshot().find((e) => e.id === boss.id)?.superArmor).toBe(true);
+  });
+
+  it("super-armor blocks a poise break during the summon channel, then expires", () => {
+    const { w, boss, p } = serketWorld();
+    p.def = 10000;
+    boss.targetId = p.id;
+    boss.combat.hp = Math.floor(boss.combat.maxHp * 0.65);
+    for (let i = 0; i < 3; i += 1) {
+      keepAlive(w, p);
+      w.step();
+    }
+    expect(w.snapshot().find((e) => e.id === boss.id)?.superArmor).toBe(true);
+    // One chain hit (8 poise) breaks her lowered poise — but not while armored.
+    boss.combat.poise = 5;
+    p.x = 0;
+    p.y = -18;
+    p.yaw = Math.PI; // face the boss (boss is at -20, player at -18)
+    let seq = 1;
+    let landed = false;
+    for (let i = 0; i < 120 && !landed; i += 1) {
+      keepAlive(w, p);
+      const hpBefore = boss.combat.hp;
+      if (p.combat.state === "idle" || p.combat.state === "move") {
+        w.applyInput(p.id, input(seq, 1, 0, p.yaw));
+        seq += 1;
+      }
+      w.step();
+      if (boss.combat.hp < hpBefore) landed = true;
+    }
+    expect(landed).toBe(true);
+    expect(boss.combat.state).not.toBe("stagger");
+    // 5 s later the channel ends: the same hit staggers her. The poise is
+    // lowered right before each swing: it regens 10/s, so a stale value
+    // set once before the loop would survive the 8-poise hit.
+    for (let i = 0; i < 110; i += 1) {
+      keepAlive(w, p);
+      w.step();
+    }
+    expect(w.snapshot().find((e) => e.id === boss.id)?.superArmor).toBeUndefined();
+    landed = false;
+    for (let i = 0; i < 120 && !landed; i += 1) {
+      keepAlive(w, p);
+      const hpBefore = boss.combat.hp;
+      if (p.combat.state === "idle" || p.combat.state === "move") {
+        boss.combat.poise = 5;
+        w.applyInput(p.id, input(seq, 1, 0, p.yaw));
+        seq += 1;
+      }
+      w.step();
+      if (boss.combat.hp < hpBefore) landed = true;
+    }
+    expect(landed).toBe(true);
+    expect(boss.combat.state).toBe("stagger");
+  });
+
+  it("phase 3: crossing 33% HP telegraphs the first poison pool (green aoe in the snapshot)", () => {
+    const { w, boss, p } = serketWorld();
+    boss.targetId = p.id;
+    boss.combat.hp = Math.floor(boss.combat.maxHp * 0.32);
+    for (let i = 0; i < 3; i += 1) {
+      keepAlive(w, p);
+      w.step();
+    }
+    expect(boss.serketBoss?.phase).toBe(3);
+    expect(boss.serketBoss?.pools).toHaveLength(1);
+    const pool = boss.serketBoss?.pools[0];
+    expect(pool?.radius).toBe(3);
+    expect(pool?.detonateTick).toBeGreaterThan(w.tick);
+    expect(pool?.detonateTick).toBeLessThanOrEqual(w.tick + 20);
+    expect(pool?.expiresTick).toBe((pool?.detonateTick ?? 0) + 200);
+    // The snapshot carries the green telegraph for the client decal.
+    const snap = w.snapshot().find((e) => e.id === boss.id);
+    expect(snap?.aoes).toHaveLength(1);
+    expect(snap?.aoes?.[0]?.kind).toBe("poison");
+    expect(snap?.aoes?.[0]?.untilTick).toBe(pool?.detonateTick);
+    expect(snap?.enraged).toBeUndefined();
+  });
+
+  it("poison pool ticks damage per second inside the pool, none outside", () => {
+    const { w, boss, p } = serketWorld();
+    const q = w.addPlayer("B");
+    boss.targetId = p.id;
+    boss.combat.hp = Math.floor(boss.combat.maxHp * 0.32);
+    // Stagger the boss so her normal attacks can't confound the pool damage.
+    holdStagger(boss);
+    w.step(); // phase 3 + first pool cast
+    const pool = boss.serketBoss?.pools[0];
+    if (!pool) throw new Error("no pool telegraphed");
+    // Remove the summoned alfas (phase 2 fired on the way down): their
+    // hits would confound the reading.
+    for (const m of [...w.mobs.values()]) {
+      if (m.id !== boss.id) w.mobs.delete(m.id);
+    }
+    p.x = pool.x;
+    p.y = pool.y; // inside the pool
+    q.x = pool.x + 20;
+    q.y = pool.y; // far outside
+    const hpBefore = p.combat.hp;
+    const detonateTick = pool.detonateTick;
+    // Step until just before detonation: no damage yet.
+    while (w.tick < detonateTick - 1) {
+      holdStagger(boss);
+      w.step();
+    }
+    expect(p.combat.hp).toBe(hpBefore);
+    // Step to the first DoT tick (detonation + 1 s).
+    while (w.tick < detonateTick + 20) {
+      holdStagger(boss);
+      w.step();
+    }
+    expect(p.combat.hp).toBeLessThan(hpBefore);
+    expect(q.combat.hp).toBe(q.combat.maxHp);
+    expect(w.drainEvents().some((e) => e.kind === "hit" && e.sourceId === boss.id && e.targetId === p.id)).toBe(true);
+    // The pool is still there (10 s duration) and the snapshot still carries it.
+    expect(boss.serketBoss?.pools.length).toBeGreaterThanOrEqual(1);
+    expect(w.snapshot().find((e) => e.id === boss.id)?.aoes?.[0]?.kind).toBe("poison");
+  });
+
+  it("poison pools expire after 10 s", () => {
+    const { w, boss, p } = serketWorld();
+    p.def = 10000; // survive the pool ticks
+    p.combat.maxHp = 10000;
+    p.combat.hp = 10000;
+    boss.targetId = p.id;
+    boss.combat.hp = Math.floor(boss.combat.maxHp * 0.32);
+    holdStagger(boss);
+    w.step(); // phase 3 + first pool cast
+    const first = boss.serketBoss?.pools[0];
+    if (!first) throw new Error("no pool telegraphed");
+    const firstDetonate = first.detonateTick;
+    // Step 11 s past the first detonation: the first pool is gone
+    // (a second pool may have been cast in the meantime — that is fine).
+    while (w.tick < firstDetonate + 220) {
+      holdStagger(boss);
+      w.step();
+    }
+    expect(boss.serketBoss?.pools.some((pl) => pl.detonateTick === firstDetonate)).toBe(false);
+  });
+
+  it("5-min enrage: the fight clock starts on first target and fires after 5 min", () => {
+    const { w, boss, p } = serketWorld();
+    // Unkillable tester: if the boss kills the player the target is lost
+    // and the fight clock restarts (by design).
+    p.def = 10000;
+    boss.targetId = p.id;
+    for (let i = 0; i < 3; i += 1) {
+      keepAlive(w, p);
+      w.step();
+    }
+    const started = boss.serketBoss?.fightStartTick ?? 0;
+    expect(started).toBeGreaterThan(0);
+    expect(started).toBeLessThanOrEqual(w.tick);
+    expect(boss.serketBoss?.enraged).toBe(false);
+    // The enrage fires at fightStartTick + 6000 (5 min at 20 Hz). Step
+    // there for real: the timer is the mechanic under test.
+    const enrageTick = started + 6000;
+    while (w.tick < enrageTick - 1) {
+      keepAlive(w, p);
+      w.step();
+    }
+    expect(boss.serketBoss?.enraged).toBe(false); // not yet (one tick early)
+    keepAlive(w, p);
+    w.step();
+    expect(boss.serketBoss?.enraged).toBe(true);
+    expect(w.snapshot().find((e) => e.id === boss.id)?.enraged).toBe(true);
+  });
+
+  it("enraged Serket deals +50% damage (min of 5 hits clears the non-enraged max)", () => {
+    const { w, boss, p } = serketWorld();
+    // Clean damage numbers: def 0, huge HP so the tester survives the hits.
+    p.def = 0;
+    p.combat.maxHp = 100000;
+    p.combat.hp = 100000;
+    boss.targetId = p.id;
+    boss.x = 0;
+    boss.y = -20;
+    p.x = 0;
+    p.y = -18;
+    // Enrage at once: the 5-min clock is covered by the previous test;
+    // here the point is the damage, so jump the world tick forward
+    // instead of stepping 6000 times. HP below full so the leash-reset
+    // check (full HP + no target + enraged = fresh fight) can't clear it.
+    boss.combat.hp = Math.floor(boss.combat.maxHp * 0.9);
+    w.tick = 6000;
+    if (boss.serketBoss) boss.serketBoss.fightStartTick = 1;
+    for (let i = 0; i < 3; i += 1) w.step();
+    expect(boss.serketBoss?.enraged).toBe(true);
+    // Collect 5 boss hits: non-enraged max is 136*1.4*1.1 = 209 (crit
+    // aside — the min over 5 hits is a non-crit with overwhelming
+    // probability); enraged non-crit is 136*1.4*1.5*[0.9,1.1] = [257,314].
+    const damages: number[] = [];
+    for (let i = 0; i < 300 && damages.length < 5; i += 1) {
+      w.step();
+      for (const e of w.drainEvents()) {
+        if (e.kind === "hit" && e.sourceId === boss.id && e.targetId === p.id) damages.push(e.amount);
+      }
+    }
+    expect(damages).toHaveLength(5);
+    expect(Math.min(...damages)).toBeGreaterThan(240);
+  });
+
+  it("snapshot carries the Serket fields; a leash reset restores phase 1", () => {
+    const { w, boss, p } = serketWorld();
+    boss.targetId = p.id;
+    boss.combat.hp = Math.floor(boss.combat.maxHp * 0.32);
+    for (let i = 0; i < 3; i += 1) {
+      keepAlive(w, p);
+      w.step();
+    }
+    const snap = w.snapshot().find((e) => e.id === boss.id);
+    expect(snap?.aoes?.[0]?.kind).toBe("poison");
+    expect(boss.serketBoss?.phase).toBe(3);
+    // Full HP again (leash reset): the fight restarts clean. A real leash
+    // loses the target first, so clear it too.
+    boss.targetId = null;
+    boss.combat.hp = boss.combat.maxHp;
+    w.step();
+    expect(boss.serketBoss?.phase).toBe(1);
+    expect(boss.serketBoss?.summonsFired).toBe(0);
+    expect(boss.serketBoss?.enraged).toBe(false);
+    expect(boss.serketBoss?.pools).toHaveLength(0);
+    const snap2 = w.snapshot().find((e) => e.id === boss.id);
+    expect(snap2?.enraged).toBeUndefined();
+    expect(snap2?.superArmor).toBeUndefined();
+    expect(snap2?.stingUntilTick).toBeUndefined();
+    expect(snap2?.aoes).toBeUndefined();
+  });
+  it("playtest hook: AZURE_EDGE_TEST_SERKET_ENRAGE_TICKS shortens the 5-min timer (dev only)", () => {
+    // Default: 6000 ticks (5 min at 20 Hz).
+    expect(testSerketEnrageTicks()).toBe(6000);
+    process.env.AZURE_EDGE_TEST_SERKET_ENRAGE_TICKS = "1200";
+    try {
+      expect(testSerketEnrageTicks()).toBe(1200);
+    } finally {
+      delete process.env.AZURE_EDGE_TEST_SERKET_ENRAGE_TICKS;
+    }
+    expect(testSerketEnrageTicks()).toBe(6000);
+    // Invalid values are ignored, never zero/negative.
+    process.env.AZURE_EDGE_TEST_SERKET_ENRAGE_TICKS = "banana";
+    try {
+      expect(testSerketEnrageTicks()).toBe(6000);
+    } finally {
+      delete process.env.AZURE_EDGE_TEST_SERKET_ENRAGE_TICKS;
     }
   });
 });

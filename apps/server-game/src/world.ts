@@ -116,6 +116,8 @@ export interface MobEntity {
   extraM: number;
   /** Neferet boss fight state (only when mobId === "neferet"). */
   boss?: NeferetBossState;
+  /** Serket boss fight state (only when mobId === "serket"). */
+  serketBoss?: SerketBossState;
 }
 
 /** One telegraphed sand-rain circle (untilTick is the server tick of impact). */
@@ -158,6 +160,62 @@ export function neferetPhaseFor(hpFrac: number): 1 | 2 | 3 {
   return 1;
 }
 
+/** One telegraphed poison pool (detonateTick = impact, expiresTick = pool gone). */
+export interface SerketPool {
+  x: number;
+  y: number;
+  radius: number;
+  detonateTick: number;
+  expiresTick: number;
+  /** Last server tick a DoT tick was applied (0 = not yet active). */
+  lastDotTick: number;
+}
+
+/** Serket boss fight state (server-side only). */
+export interface SerketBossState {
+  phase: 1 | 2 | 3;
+  /** Phase-2 summon volley already fired (0/1). */
+  summonsFired: number;
+  /** Server tick until which super-armor holds (phase-2 summon channel). */
+  superArmorUntilTick: number;
+  /** Server tick the fight started (first target acquired); 0 = not started. */
+  fightStartTick: number;
+  /** 5-min enrage active (+50% damage, permanent — no poise-break interrupt). */
+  enraged: boolean;
+  /** Tail-sting telegraph: server tick of the 270° impact, 0 = not telegraphing. */
+  stingUntilTick: number;
+  /** The current windup is a tail sting (60 frames, 270° arc). */
+  stingArmed: boolean;
+  /** Next server tick a tail sting may be armed (phase 1). */
+  nextStingTick: number;
+  /** Poison pools (telegraphing + active). */
+  pools: SerketPool[];
+  /** Next server tick a poison pool may be cast (phase 3). */
+  nextPoolTick: number;
+}
+
+export function createSerketBossState(): SerketBossState {
+  return {
+    phase: 1,
+    summonsFired: 0,
+    superArmorUntilTick: 0,
+    fightStartTick: 0,
+    enraged: false,
+    stingUntilTick: 0,
+    stingArmed: false,
+    nextStingTick: 0,
+    pools: [],
+    nextPoolTick: 0,
+  };
+}
+
+/** Boss phase from HP fraction (INSTANCIAS.md §2). */
+export function serketPhaseFor(hpFrac: number): 1 | 2 | 3 {
+  if (hpFrac < SERKET_PHASE3_HP) return 3;
+  if (hpFrac < SERKET_PHASE2_HP) return 2;
+  return 1;
+}
+
 const SUB_STEPS_PER_TICK = 3;
 const FRAME_DT_S = 1 / 60;
 /** Default class (Espadachim) when the client sends no/invalid ?class=. */
@@ -192,6 +250,18 @@ export function testPlayerHpMultiplier(): number {
   return Number.isFinite(raw) && raw > 0 ? raw : 1;
 }
 
+/**
+ * Dev-only Serket enrage timer (ticks): AZURE_EDGE_TEST_SERKET_ENRAGE_TICKS
+ * shortens the 5-min enrage so a live playtest can reach it (the real
+ * fight runs ~3-4 min with the ATK hook). Same guard as the ATK/HP hooks:
+ * ignored in production, default 6000 (5 min at 20 Hz), invalid/<=0 ignored.
+ */
+export function testSerketEnrageTicks(): number {
+  if (process.env.NODE_ENV === "production") return SERKET_ENRAGE_TICKS;
+  const raw = Number(process.env.AZURE_EDGE_TEST_SERKET_ENRAGE_TICKS ?? "");
+  return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : SERKET_ENRAGE_TICKS;
+}
+
 // --- Neferet boss fight (docs/INSTANCIAS.md §1; dungeons.json tumbas_neferet) ---
 /** HP fractions at which Neferet summons 2 mummies each (phase 1). */
 const NEFERET_SUMMON_THRESHOLDS = [0.75, 0.5];
@@ -210,6 +280,38 @@ const NEFERET_RAIN_DAMAGE_MULT = 1.0;
 const NEFERET_RAIN_POISE = 10;
 /** Breather after a poise break interrupts the enrage (implementation choice). */
 const NEFERET_ENRAGE_BREAK_TICKS = 200; // 10 s
+
+// --- Serket boss fight (docs/INSTANCIAS.md §2; dungeons.json templo_serket) ---
+/** Phase boundaries by HP fraction (computed on scaled HP, so they survive rebalancing). */
+const SERKET_PHASE2_HP = 0.66;
+const SERKET_PHASE3_HP = 0.33;
+/** Phase 2: summon 2 Escorpiões Alfa once, on entering the phase. */
+const SERKET_SUMMON_COUNT = 2;
+/** Super-armor channel after the phase-2 summon (implementation choice):
+ *  5 s for the adds to establish — "não adianta focar nela". */
+const SERKET_SUMMON_CHANNEL_TICKS = 100; // 5 s at 20 Hz
+/** Tail sting (phase 1): 270° arc telegraphed 1.0 s (design). */
+const SERKET_STING_ARC_DEG = 270;
+const SERKET_STING_TELEGRAPH_TICKS = 20; // 1.0 s at 20 Hz
+const SERKET_STING_WINDUP_FRAMES = 60; // 1.0 s at 60 fps logical
+/** Stings at most every 12 s in phase 1 (implementation choice). */
+const SERKET_STING_INTERVAL_TICKS = 240;
+/** Poison rain (phase 3): 1.0 s telegraph, then a green pool dealing
+ *  damage per second (design). Interval mirrors Neferet's rain. */
+const SERKET_POOL_TELEGRAPH_TICKS = 20; // 1.0 s at 20 Hz
+const SERKET_POOL_INTERVAL_TICKS = 160; // 8 s between casts
+const SERKET_POOL_RADIUS_M = 3.0; // same as her arc attack radius
+const SERKET_POOL_DURATION_TICKS = 200; // 10 s of active pool (implementation choice)
+const SERKET_POOL_MAX_ACTIVE = 3;
+const SERKET_POOL_DOT_TICKS = 20; // 1 damage tick per second
+/** Pool tick mult on the boss's scaled atk: ~28 HP/s vs a lv 20 player
+ *  (~8% of maxHp/s) — "saia de cima" is the counterplay, not guard. */
+const SERKET_POOL_DAMAGE_MULT = 0.25;
+/** 5-min enrage (design): +50% damage, a race against the clock. The
+ *  timer starts when the fight starts (first target); unlike Neferet's
+ *  enrage it is NOT interrupted by a poise break. */
+const SERKET_ENRAGE_TICKS = 6000; // 5 min at 20 Hz
+const SERKET_ENRAGE_DAMAGE_MULT = 1.5;
 /** Fallback class (gamedata guarantees >= 1 class; fail loud otherwise). */
 function firstClass(): ClassData {
   const c = CLASSES[0];
@@ -417,6 +519,8 @@ export class ZoneWorld {
     };
     // Neferet spawns with her 3-phase fight attached (any spawn path).
     if (mobId === "neferet") m.boss = createNeferetBossState();
+    // Serket spawns with her 3-phase fight attached (any spawn path).
+    if (mobId === "serket") m.serketBoss = createSerketBossState();
     this.mobs.set(id, m);
     return m;
   }
@@ -781,7 +885,12 @@ export class ZoneWorld {
     c.lastHitFrame = this.frame;
     this.emit({ kind: "hit", sourceId: source.id, targetId: t.id, amount: dmg, crit, finisher, x: t.x, y: t.y });
     if (effect === "knockback") this.pushBack(t, source.yaw, 0.6);
-    const superArmor = t.kind === "player" && this.targetSuperArmor(t);
+    // Super-armor: players in a skill window, Serket during her phase-2
+    // summon channel (she cannot be staggered — "não adianta focar nela").
+    const superArmor =
+      t.kind === "player"
+        ? this.targetSuperArmor(t)
+        : t.serketBoss !== undefined && this.tick < t.serketBoss.superArmorUntilTick;
     if (applyPoise(c, finalPoise, this.frame, superArmor) === "stagger") {
       this.staggerTarget(t);
       this.onPoiseBreakStagger(t);
@@ -833,6 +942,12 @@ export class ZoneWorld {
       t.aiState = "dead";
       // A dead boss's telegraphed rains never detonate.
       if (t.boss) t.boss.aoes = [];
+      // A dead Serket's pools and sting telegraph end with her.
+      if (t.serketBoss) {
+        t.serketBoss.pools = [];
+        t.serketBoss.stingUntilTick = 0;
+        t.serketBoss.stingArmed = false;
+      }
     }
   }
 
@@ -956,6 +1071,163 @@ export class ZoneWorld {
       this.applyHit(
         { id: m.id, x: m.x, y: m.y, yaw: m.yaw, atk: m.atk },
         NEFERET_RAIN_DAMAGE_MULT, NEFERET_RAIN_POISE, false, undefined, p,
+      );
+    }
+  }
+
+  // --- Serket boss fight (INSTANCIAS.md §2) ---
+
+  /** Damage multiplier: enraged Serket deals +50% damage (5-min enrage). */
+  private mobDamageMult(m: MobEntity): number {
+    return m.serketBoss?.enraged ? SERKET_ENRAGE_DAMAGE_MULT : 1;
+  }
+
+  /**
+   * Arm the tail sting when Serket enters windup in phase 1 and the sting
+   * is off cooldown: the windup becomes 60 frames (1.0 s telegraph) and
+   * the attack a 270° arc. The client draws the sector from stingUntilTick.
+   */
+  private armSerketSting(m: MobEntity): void {
+    const b = m.serketBoss;
+    if (!b || b.phase !== 1 || b.stingArmed) return;
+    if (this.tick < b.nextStingTick) return;
+    b.stingArmed = true;
+    b.stingUntilTick = this.tick + SERKET_STING_TELEGRAPH_TICKS;
+  }
+
+  /**
+   * Serket's 3-phase fight, driven by HP fraction (INSTANCIAS.md §2):
+   * phase 1 tail stings (270° arc, 1.0 s telegraph); phase 2 (<66%)
+   * summons 2 Escorpiões Alfa and gains super-armor for the 5 s channel;
+   * phase 3 (<33%) adds the poison rain (green pools, damage per second)
+   * and the 5-min enrage (+50% damage, permanent). Phases are cumulative:
+   * the pools keep casting in phase 3 and the enrage can fire in any phase
+   * once the fight has run 5 minutes. Runs every sub-step (before the
+   * stagger pause) so phase changes, summons and pool ticks are never
+   * skipped between ticks.
+   */
+  private updateSerketBoss(m: MobEntity): void {
+    const b = m.serketBoss;
+    if (!b) return;
+    const c = m.combat;
+    // Full HP again (leash reset): a fresh fight. (fightStartTick is NOT
+    // part of the condition: it becomes > 0 as soon as the fight starts,
+    // while the boss is still at full HP — including it would reset the
+    // enrage clock every sub-step before any damage is dealt.) A live
+    // fight (target present) never resets, even at full HP: the 5-min
+    // enrage is time-based and can fire before any damage is dealt.
+    if (c.hp >= c.maxHp && m.targetId === null && (b.phase !== 1 || b.summonsFired > 0 || b.enraged || b.pools.length > 0)) {
+      m.serketBoss = createSerketBossState();
+      return;
+    }
+    // The fight starts when she first acquires a target (5-min enrage
+    // clock); losing the target (wipe/leash) restarts the clock.
+    if (m.targetId === null) {
+      b.fightStartTick = 0;
+    } else if (b.fightStartTick === 0) {
+      b.fightStartTick = this.tick;
+    }
+    const hpFrac = c.hp / c.maxHp;
+    const phase = serketPhaseFor(hpFrac);
+    if (phase !== b.phase) {
+      b.phase = phase;
+      if (phase === 3) b.nextPoolTick = Math.min(b.nextPoolTick, this.tick); // pools start at once
+    }
+    // Summon volley: 2 Escorpiões Alfa on entering phase 2, with
+    // super-armor for the channel (a big hit can cross the threshold in one blow).
+    if (b.summonsFired === 0 && hpFrac <= SERKET_PHASE2_HP) {
+      b.summonsFired = 1;
+      this.serketSummon(m);
+      b.superArmorUntilTick = this.tick + SERKET_SUMMON_CHANNEL_TICKS;
+    }
+    // 5-min enrage: permanent, not interrupted by a poise break.
+    // (testSerketEnrageTicks: the dev-only hook shortens the timer for
+    // live playtests; production always uses SERKET_ENRAGE_TICKS.)
+    if (!b.enraged && b.fightStartTick > 0 && this.tick >= b.fightStartTick + testSerketEnrageTicks()) {
+      b.enraged = true;
+    }
+    // A sting armed but no longer winding up/attacking was interrupted
+    // (stagger, target out of range, leash): disarm it so the next normal
+    // attack doesn't inherit the 270° arc.
+    if (b.stingArmed && m.aiState !== "windup" && m.aiState !== "attack") {
+      b.stingArmed = false;
+      b.stingUntilTick = 0;
+    }
+    // Poison rain: one cast at a time, up to SERKET_POOL_MAX_ACTIVE pools,
+    // while phase >= 3.
+    if (b.phase >= 3 && this.tick >= b.nextPoolTick && b.pools.length < SERKET_POOL_MAX_ACTIVE) {
+      this.serketCastPool(m);
+    }
+    // Pool lifecycle: expire old pools, tick damage on active ones.
+    for (let i = b.pools.length - 1; i >= 0; i -= 1) {
+      const pool = b.pools[i];
+      if (!pool) continue;
+      if (this.tick >= pool.expiresTick) {
+        b.pools.splice(i, 1);
+        continue;
+      }
+      if (this.tick >= pool.detonateTick && this.tick >= pool.lastDotTick + SERKET_POOL_DOT_TICKS) {
+        pool.lastDotTick = this.tick;
+        this.serketPoolDot(m, pool);
+      }
+    }
+  }
+
+  /** Summon SERKET_SUMMON_COUNT Escorpiões Alfa around the boss (phase 2). */
+  private serketSummon(m: MobEntity): void {
+    const half = this.zoneSizeM() / 2 - 2;
+    for (let i = 0; i < SERKET_SUMMON_COUNT; i += 1) {
+      const angle = this.rng() * Math.PI * 2;
+      const radius = 2 + this.rng() * 1.5;
+      const summoned = this.spawnMob(
+        "escorpiao_alfa",
+        Math.max(-half, Math.min(half, m.x + Math.cos(angle) * radius)),
+        Math.max(-half, Math.min(half, m.y + Math.sin(angle) * radius)),
+        m.level, // summons fight at the boss's level
+      );
+      // Join the fight at once instead of waiting for a patrol aggro check.
+      if (summoned) summoned.targetId = m.targetId;
+    }
+  }
+
+  /** Poison rain (phase 3+): one telegraphed pool on the boss's target. */
+  private serketCastPool(m: MobEntity): void {
+    const b = m.serketBoss;
+    if (!b) return;
+    let target = m.targetId !== null ? this.players.get(m.targetId) : undefined;
+    if (!target) {
+      const id = this.nearestPlayer(m.x, m.y, 30);
+      target = id !== null ? this.players.get(id) : undefined;
+    }
+    if (!target || target.combat.state === "dead") {
+      // Nobody to hit: try again after the interval instead of stalling.
+      b.nextPoolTick = this.tick + SERKET_POOL_INTERVAL_TICKS;
+      return;
+    }
+    const angle = this.rng() * Math.PI * 2;
+    const offset = this.rng() * 1.5;
+    const detonateTick = this.tick + SERKET_POOL_TELEGRAPH_TICKS;
+    b.pools.push({
+      x: target.x + Math.cos(angle) * offset,
+      y: target.y + Math.sin(angle) * offset,
+      radius: SERKET_POOL_RADIUS_M,
+      detonateTick,
+      expiresTick: detonateTick + SERKET_POOL_DURATION_TICKS,
+      lastDotTick: detonateTick,
+    });
+    b.nextPoolTick = detonateTick + SERKET_POOL_INTERVAL_TICKS;
+  }
+
+  /** Poison pool tick: players still standing in the pool take damage per
+   *  second. Reuses the shared damage path (dodge i-frames, guard, poise,
+   *  events) with 0 poise damage — pools don't stagger. */
+  private serketPoolDot(m: MobEntity, pool: SerketPool): void {
+    for (const p of this.players.values()) {
+      if (p.combat.state === "dead") continue;
+      if (Math.hypot(p.x - pool.x, p.y - pool.y) > pool.radius) continue;
+      this.applyHit(
+        { id: m.id, x: pool.x, y: pool.y, yaw: m.yaw, atk: m.atk },
+        SERKET_POOL_DAMAGE_MULT * this.mobDamageMult(m), 0, false, undefined, p,
       );
     }
   }
@@ -1219,12 +1491,14 @@ export class ZoneWorld {
         m.targetId = null;
         m.taunt = null;
         if (m.boss) m.boss = createNeferetBossState(); // respawn restarts the fight
+        if (m.serketBoss) m.serketBoss = createSerketBossState(); // respawn restarts the fight
       }
       return;
     }
     // Boss fight first: phase changes, summons and rain detonations run even
     // while the boss is staggered (only death pauses the fight).
     if (m.boss) this.updateNeferetBoss(m);
+    if (m.serketBoss) this.updateSerketBoss(m);
     const speed = this.mobAttackSpeed(m);
     c.stateFrame += 1;
     c.poise = Math.min(c.poiseMax, c.poise + (d.poiseRegenPerS / 60));
@@ -1281,6 +1555,8 @@ export class ZoneWorld {
         if (Math.hypot(target.x - m.x, target.y - m.y) <= d.attackRangeM) {
           m.aiState = "windup";
           c.stateFrame = 0;
+          // Phase-1 Serket may open with a tail sting instead of her normal arc.
+          this.armSerketSting(m);
           break;
         }
         this.moveMobToward(m, target.x, target.y, d.chaseSpeedMps);
@@ -1297,7 +1573,10 @@ export class ZoneWorld {
           break;
         }
         // Enraged Neferet telegraphs faster (windup scaled by attack speed).
-        if (c.stateFrame >= Math.max(1, Math.round(d.attack.windup / speed))) {
+        // A Serket tail sting telegraphs 1.0 s (60 frames) instead of her 36-frame windup.
+        const stingWindup = m.serketBoss?.stingArmed === true;
+        const windupFrames = stingWindup ? SERKET_STING_WINDUP_FRAMES : d.attack.windup;
+        if (c.stateFrame >= Math.max(1, Math.round(windupFrames / speed))) {
           m.aiState = "attack";
           c.stateFrame = 0;
           m.hitDone = new Set();
@@ -1306,13 +1585,23 @@ export class ZoneWorld {
       }
       case "attack": {
         if (c.stateFrame < d.attack.active) {
+          // A tail sting sweeps 270° (the 90° wedge behind her is safe);
+          // an enraged Serket deals +50% damage on every attack.
+          const sting = m.serketBoss?.stingArmed === true;
           this.resolveHit(
             m, "mobatk",
-            d.attack.shape.radius ?? 2, d.attack.shape.angle ?? 90,
-            d.attack.mult, d.attack.poise, false, undefined, false,
+            d.attack.shape.radius ?? 2, sting ? SERKET_STING_ARC_DEG : (d.attack.shape.angle ?? 90),
+            d.attack.mult * this.mobDamageMult(m), d.attack.poise, false, undefined, false,
           );
         }
         if (c.stateFrame >= d.attack.active + Math.max(1, Math.round(d.attack.recovery / speed))) {
+          // A finished tail sting goes back on cooldown.
+          const sb = m.serketBoss;
+          if (sb?.stingArmed) {
+            sb.stingArmed = false;
+            sb.stingUntilTick = 0;
+            sb.nextStingTick = this.tick + SERKET_STING_INTERVAL_TICKS;
+          }
           m.aiState = "recover";
           c.stateFrame = 0;
         }
@@ -1385,6 +1674,24 @@ export class ZoneWorld {
         ...(m.boss && m.boss.aoes.length > 0
           ? {
               aoes: m.boss.aoes.map((a) => ({ x: a.x, y: a.y, radius: a.radius, untilTick: a.detonateTick })),
+            }
+          : {}),
+        // Boss fight state (Serket): enrage flag + super-armor + tail-sting
+        // telegraph + poison pools (green aoes, kind "poison").
+        ...(m.serketBoss?.enraged ? { enraged: true } : {}),
+        ...(m.serketBoss && this.tick < m.serketBoss.superArmorUntilTick ? { superArmor: true } : {}),
+        ...(m.serketBoss && m.serketBoss.stingUntilTick > 0
+          ? { stingUntilTick: m.serketBoss.stingUntilTick }
+          : {}),
+        ...(m.serketBoss && m.serketBoss.pools.length > 0
+          ? {
+              aoes: m.serketBoss.pools.map((p) => ({
+                x: p.x,
+                y: p.y,
+                radius: p.radius,
+                untilTick: p.detonateTick,
+                kind: "poison" as const,
+              })),
             }
           : {}),
       }));

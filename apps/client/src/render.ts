@@ -417,10 +417,10 @@ function makeMummy(color: number, scale: number): { group: THREE.Group; ring: TH
   return { group: g, ring };
 }
 /** Shared telegraph ring for procedural mobs (shown during windup). */
-function mobRing(): THREE.Mesh {
+function mobRing(color = 0xff2a1a): THREE.Mesh {
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(0.9, 1.1, 32),
-    new THREE.MeshBasicMaterial({ color: 0xff2a1a, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }),
+    new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide, transparent: true, opacity: 0.85 }),
   );
   ring.rotation.x = -Math.PI / 2;
   ring.position.y = 0.03;
@@ -464,6 +464,23 @@ function aoeDecal(): THREE.Group {
   g.userData.ring = ring;
   g.visible = false;
   return g;
+}
+
+/**
+ * Tail-sting telegraph (Serket phase 1): a 270° sector around the boss;
+ * the 90° wedge behind her stays empty (safe). Unit radius 1 — the
+ * caller scales it to the sting radius (3.2 m, mobs.json serket) and
+ * rotates it per frame (YXZ, like showSwingFor). The sector is centered
+ * on the boss's facing: thetaStart -PI/4, length 3PI/2.
+ */
+function stingDecal(): THREE.Mesh {
+  const mesh = new THREE.Mesh(
+    new THREE.CircleGeometry(1, 48, -Math.PI / 4, (Math.PI * 3) / 2),
+    new THREE.MeshBasicMaterial({ color: 0xff5522, side: THREE.DoubleSide, transparent: true, opacity: 0.2, depthWrite: false }),
+  );
+  mesh.rotation.order = "YXZ";
+  mesh.visible = false;
+  return mesh;
 }
 
 /**
@@ -897,7 +914,7 @@ function makeNeferet(color: number, scale: number): { group: THREE.Group; ring: 
  * frente ao lado do corpo — como na referência. Forward is -Z. Returns
  * the tail group for the sway animation.
  */
-function makeSerket(color: number, scale: number): { group: THREE.Group; ring: THREE.Mesh; tail: THREE.Group } {
+function makeSerket(color: number, scale: number): { group: THREE.Group; ring: THREE.Mesh; tail: THREE.Group; enrage: THREE.Mesh; superArmor: THREE.Mesh } {
   const g = new THREE.Group();
   const shell = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.15 });
   const shellDark = new THREE.MeshStandardMaterial({ color: 0x4a0f16, roughness: 0.6 });
@@ -1068,8 +1085,20 @@ function makeSerket(color: number, scale: number): { group: THREE.Group; ring: T
   const ring = mobRing();
   g.add(ring);
   g.add(eliteRing(1.6));
+  // Enrage ring (phase 3 / 5-min enrage): same windup-ring factory, 1.8x, hidden until enraged.
+  const enrage = mobRing();
+  enrage.scale.setScalar(1.8);
+  enrage.userData.baseScale = 1.8;
+  enrage.visible = false;
+  g.add(enrage);
+  // Super-armor ring (phase 2 summon channel): pale cyan-white, 1.4x, hidden until armored.
+  const superArmor = mobRing(0x9fd8ff);
+  superArmor.scale.setScalar(1.4);
+  superArmor.userData.baseScale = 1.4;
+  superArmor.visible = false;
+  g.add(superArmor);
   g.scale.setScalar(scale);
-  return { group: g, ring, tail };
+  return { group: g, ring, tail, enrage, superArmor };
 }
 
 /** Build the right procedural model for a mobId (color/scale from gamedata). */
@@ -1077,7 +1106,7 @@ function buildMobModel(
   mobId: string,
   color: number,
   scale: number,
-): { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group; enrage?: THREE.Mesh } {
+): { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group; enrage?: THREE.Mesh; superArmor?: THREE.Mesh } {
   switch (mobId) {
     case "escorpiao":
     case "escorpiao_alfa":
@@ -1649,7 +1678,7 @@ export class WorldView {
   }>();
   private readonly mobs = new Map<
     number,
-    { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group; mobId: string; glb?: boolean; enrage?: THREE.Mesh; aoes?: THREE.Group[] }
+    { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group; mobId: string; glb?: boolean; enrage?: THREE.Mesh; superArmor?: THREE.Mesh; sting?: THREE.Mesh; aoes?: THREE.Group[] }
   >();
   /** Debug-only visual mobs (?testmobs= in main.ts): not server entities,
    *  never in the mobs map, so snapshots can't remove them. */
@@ -2782,7 +2811,7 @@ export class WorldView {
    * the GLB-scaled inner would span the whole arena. No tail group — the
    * mesh is static; updateMob leans it gently instead.
    */
-  private makeSerketGlbGroup(scale: number): { group: THREE.Group; ring: THREE.Mesh } | null {
+  private makeSerketGlbGroup(scale: number): { group: THREE.Group; ring: THREE.Mesh; enrage: THREE.Mesh; superArmor: THREE.Mesh } | null {
     if (!this.serketGlbTemplate) return null;
     const inner = this.serketGlbTemplate.clone(true);
     inner.rotation.y = Math.PI;
@@ -2795,11 +2824,23 @@ export class WorldView {
     // so the pulse multiplies it instead of shrinking the ring to ~1 m.
     ring.userData.baseScale = scale;
     wrapper.add(ring);
+    // Enrage ring (phase 3 / 5-min enrage): same pattern, 1.8x the windup ring.
+    const enrage = mobRing();
+    enrage.scale.setScalar(scale * 1.8);
+    enrage.userData.baseScale = scale * 1.8;
+    enrage.visible = false;
+    wrapper.add(enrage);
+    // Super-armor ring (phase 2 summon channel): pale cyan-white, 1.4x.
+    const superArmor = mobRing(0x9fd8ff);
+    superArmor.scale.setScalar(scale * 1.4);
+    superArmor.userData.baseScale = scale * 1.4;
+    superArmor.visible = false;
+    wrapper.add(superArmor);
     const elite = eliteRing(1.6);
     elite.scale.setScalar(scale);
     wrapper.add(elite);
     wrapper.userData.serketGlb = true;
-    return { group: wrapper, ring };
+    return { group: wrapper, ring, enrage, superArmor };
   }
 
   /** Swap every live procedural Serket for the GLB (real boss + test mobs). */
@@ -2892,6 +2933,7 @@ export class WorldView {
       group: THREE.Group;
       ring?: THREE.Mesh;
       enrage?: THREE.Mesh;
+      superArmor?: THREE.Mesh;
       tail?: THREE.Group;
       mobId: string;
       glb?: boolean;
@@ -2899,7 +2941,7 @@ export class WorldView {
     mobId: "serket" | "neferet",
   ): boolean {
     const scale = MOBS.find((m) => m.id === mobId)?.scale ?? (mobId === "serket" ? 1.8 : 1.6);
-    const built: { group: THREE.Group; ring: THREE.Mesh; enrage?: THREE.Mesh } | null =
+    const built: { group: THREE.Group; ring: THREE.Mesh; enrage?: THREE.Mesh; superArmor?: THREE.Mesh } | null =
       mobId === "serket" ? this.makeSerketGlbGroup(scale) : this.makeNeferetGlbGroup(scale);
     if (!built) return false;
     built.group.position.copy(entry.group.position);
@@ -2909,6 +2951,7 @@ export class WorldView {
     entry.group = built.group;
     if (entry.ring !== undefined) entry.ring = built.ring;
     if (entry.enrage !== undefined && built.enrage !== undefined) entry.enrage = built.enrage;
+    if (entry.superArmor !== undefined && built.superArmor !== undefined) entry.superArmor = built.superArmor;
     delete entry.tail;
     entry.glb = true;
     return true;
@@ -3189,22 +3232,31 @@ export class WorldView {
       const scale = data?.scale ?? 1;
       const built = buildMobModel(e.mobId ?? "", color, scale);
       this.scene.add(built.group);
-      const created: { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group; mobId: string; glb?: boolean; enrage?: THREE.Mesh; aoes?: THREE.Group[] } = {
+      const created: { group: THREE.Group; ring: THREE.Mesh; tail?: THREE.Group; mobId: string; glb?: boolean; enrage?: THREE.Mesh; superArmor?: THREE.Mesh; sting?: THREE.Mesh; aoes?: THREE.Group[] } = {
         group: built.group,
         ring: built.ring,
         mobId: e.mobId ?? "",
       };
       if (built.tail !== undefined) created.tail = built.tail;
       if (built.enrage !== undefined) created.enrage = built.enrage;
-      // Boss ground-AoE telegraphs (Neferet sand rain): pool of 2, scene-level
-      // (not children of the mob group — the GLB swap must not move them).
+      if (built.superArmor !== undefined) created.superArmor = built.superArmor;
+      // Boss ground-AoE telegraphs (Neferet sand rain, Serket poison pools):
+      // pool of 3, scene-level (not children of the mob group — the GLB
+      // swap must not move them). Serket can hold up to 3 pools at once.
       const aoes: THREE.Group[] = [];
-      for (let i = 0; i < 2; i += 1) {
+      for (let i = 0; i < 3; i += 1) {
         const decal = aoeDecal();
         this.scene.add(decal);
         aoes.push(decal);
       }
       created.aoes = aoes;
+      // Tail-sting telegraph (Serket phase 1): one 270° sector, scene-level
+      // (it follows the boss; the GLB swap must not move it).
+      if (e.mobId === "serket") {
+        const sting = stingDecal();
+        this.scene.add(sting);
+        created.sting = sting;
+      }
       entry = created;
       this.mobs.set(e.id, entry);
       // Boss GLB loads in the background; the procedural boss stays
@@ -3251,6 +3303,30 @@ export class WorldView {
         entry.enrage.scale.setScalar(base * pulse);
       }
     }
+    // Super-armor ring (Serket phase 2): pale cyan-white, shown while the server says superArmor.
+    if (entry.superArmor) {
+      entry.superArmor.visible = e.superArmor === true;
+      if (entry.superArmor.visible) {
+        const base = (entry.superArmor.userData.baseScale as number | undefined) ?? 1.4;
+        const pulse = 0.9 + Math.sin(performance.now() / 120) * 0.1;
+        entry.superArmor.scale.setScalar(base * pulse);
+      }
+    }
+    // Tail-sting telegraph (Serket phase 1): the 270° sector follows the
+    // boss and brightens as the impact approaches (stingUntilTick, 20 Hz).
+    if (entry.sting) {
+      const until = e.stingUntilTick;
+      const visible = until !== undefined && serverTick !== undefined && serverTick < until;
+      entry.sting.visible = visible;
+      if (visible) {
+        const frac = Math.min(1, Math.max(0, 1 - (until - serverTick) / 20));
+        entry.sting.position.set(tx, ty + 0.05, tz);
+        // YXZ order: lay flat first (local +Y -> world -Z = forward), then yaw.
+        entry.sting.rotation.set(-Math.PI / 2, -e.yaw, 0);
+        entry.sting.scale.setScalar(3.2); // her arc attack radius (mobs.json serket)
+        (entry.sting.material as THREE.MeshBasicMaterial).opacity = 0.2 + 0.35 * frac;
+      }
+    }
     // Sand-rain telegraphs: position each decal in world coords; the disc
     // fills over the 1.0 s telegraph (untilTick is in server ticks, 20 Hz).
     if (entry.aoes) {
@@ -3270,7 +3346,16 @@ export class WorldView {
         const [ax, , az] = WORLD_TO_THREE(aoe.x, aoe.y);
         decal.position.set(ax, this.terrainHeight(ax, az), az);
         decal.scale.setScalar(aoe.radius);
+        // Poison pools are green (kind "poison"); sand rain stays red.
+        const poison = aoe.kind === "poison";
         const disc = decal.userData.disc as THREE.Mesh | undefined;
+        const ring = decal.userData.ring as THREE.Mesh | undefined;
+        if (disc) {
+          (disc.material as THREE.MeshBasicMaterial).color.setHex(poison ? 0x44ff66 : 0xff2222);
+        }
+        if (ring) {
+          (ring.material as THREE.MeshBasicMaterial).color.setHex(poison ? 0x22cc44 : 0xff3333);
+        }
         if (disc) disc.scale.setScalar(Math.max(0.01, frac));
       }
     }
