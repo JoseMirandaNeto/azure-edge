@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ZoneWorld, type MobEntity, type PlayerEntity } from "../src/world.js";
+import { ZoneWorld, testPlayerAtkMultiplier, testPlayerHpMultiplier, type MobEntity, type PlayerEntity } from "../src/world.js";
 
 function forwardInput(seq: number) {
   return { seq, tick: seq, moveX: 0, moveY: 1, yaw: 0, buttons: 0, skillId: 0 };
@@ -551,6 +551,43 @@ describe("Neferet boss (3-phase fight, INSTANCIAS.md §1)", () => {
     const templo = new ZoneWorld({ zoneId: "templo", maxPlayers: 8 });
     const serket = templo.spawnDungeonMobs("templo").find((m) => m.mobId === "serket");
     expect(serket?.boss).toBeUndefined();
+  });
+
+  it("playtest hooks: AZURE_EDGE_TEST_ATK_MULT / HP_MULT scale the player, off by default", () => {
+    // Default: Espadachim base atk 10, maxHp 100, no armor bonus.
+    expect(testPlayerAtkMultiplier()).toBe(1);
+    expect(testPlayerHpMultiplier()).toBe(1);
+    const w = new ZoneWorld();
+    const base = w.addPlayer("A", { classId: "espadachim" });
+    expect(base.atk).toBe(10);
+    expect(base.combat.maxHp).toBe(100);
+    // Hooks on: 50x atk, 100x HP, for the live-playtest probe (vitest runs
+    // with NODE_ENV=test, so the production guard does not block it).
+    process.env.AZURE_EDGE_TEST_ATK_MULT = "50";
+    process.env.AZURE_EDGE_TEST_HP_MULT = "100";
+    try {
+      expect(testPlayerAtkMultiplier()).toBe(50);
+      expect(testPlayerHpMultiplier()).toBe(100);
+      const boosted = w.addPlayer("B", { classId: "espadachim" });
+      expect(boosted.atk).toBe(500);
+      expect(boosted.combat.maxHp).toBe(10000);
+      expect(boosted.combat.hp).toBe(10000);
+    } finally {
+      delete process.env.AZURE_EDGE_TEST_ATK_MULT;
+      delete process.env.AZURE_EDGE_TEST_HP_MULT;
+    }
+    expect(testPlayerAtkMultiplier()).toBe(1);
+    expect(testPlayerHpMultiplier()).toBe(1);
+    // Invalid values are ignored, never zero/negative stats.
+    process.env.AZURE_EDGE_TEST_ATK_MULT = "banana";
+    process.env.AZURE_EDGE_TEST_HP_MULT = "0";
+    try {
+      expect(testPlayerAtkMultiplier()).toBe(1);
+      expect(testPlayerHpMultiplier()).toBe(1);
+    } finally {
+      delete process.env.AZURE_EDGE_TEST_ATK_MULT;
+      delete process.env.AZURE_EDGE_TEST_HP_MULT;
+    }
   });
 });
 

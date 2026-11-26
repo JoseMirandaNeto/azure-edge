@@ -169,6 +169,29 @@ const DEFAULT_MAX_PLAYERS = 256;
 const MOB_HP_PER_LEVEL = 0.15;
 const MOB_ATK_PER_LEVEL = 0.08;
 
+/**
+ * Local playtest hooks (dev only): AZURE_EDGE_TEST_ATK_MULT multiplies
+ * player attack and AZURE_EDGE_TEST_HP_MULT multiplies player max HP, so
+ * a lv 1 tester can reach a lv 12 boss's later phases in live play (a lv 1
+ * Espadachim deals ~9-20/swing vs Neferet's 35.775 HP — ~26k damage just
+ * to reach phase 2 — and dies in 2-3 boss hits). Never active in
+ * production: Render sets NODE_ENV=production (render.yaml) and both
+ * multipliers are ignored there even if the vars are set. Default 1 (off);
+ * values <= 0 or non-numeric are ignored. Server-side only — the client
+ * never sends damage, so this cannot be triggered from a browser.
+ */
+export function testPlayerAtkMultiplier(): number {
+  if (process.env.NODE_ENV === "production") return 1;
+  const raw = Number(process.env.AZURE_EDGE_TEST_ATK_MULT ?? "");
+  return Number.isFinite(raw) && raw > 0 ? raw : 1;
+}
+
+export function testPlayerHpMultiplier(): number {
+  if (process.env.NODE_ENV === "production") return 1;
+  const raw = Number(process.env.AZURE_EDGE_TEST_HP_MULT ?? "");
+  return Number.isFinite(raw) && raw > 0 ? raw : 1;
+}
+
 // --- Neferet boss fight (docs/INSTANCIAS.md §1; dungeons.json tumbas_neferet) ---
 /** HP fractions at which Neferet summons 2 mummies each (phase 1). */
 const NEFERET_SUMMON_THRESHOLDS = [0.75, 0.5];
@@ -293,8 +316,8 @@ export class ZoneWorld {
     const armorOk = armor !== undefined && armor.classId === cls.id ? armor : undefined;
     const gender: "f" | "m" = opts.gender === "m" ? "m" : "f";
     // Armor bonus (armors.json): tier 1 +0, tier 2/3 add maxHp/atk/def/mana.
-    const maxHp = cls.base.maxHp + (armorOk?.bonus.maxHp ?? 0);
-    const atk = cls.base.atk + (armorOk?.bonus.atk ?? 0);
+    const maxHp = Math.round((cls.base.maxHp + (armorOk?.bonus.maxHp ?? 0)) * testPlayerHpMultiplier());
+    const atk = Math.round((cls.base.atk + (armorOk?.bonus.atk ?? 0)) * testPlayerAtkMultiplier());
     const def = cls.base.def + (armorOk?.bonus.def ?? 0);
     const mana = cls.base.mana + (armorOk?.bonus.mana ?? 0);
     // Deterministic spawn ring around the zone spawn — no Math.random.
